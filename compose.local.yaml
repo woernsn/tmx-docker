@@ -1,0 +1,19 @@
+# Build both application images from the upstream commits in sources.env.
+services:
+  server:
+    image: tmx-local-server:latest
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+      additional_contexts:
+        source: https://github.com/CourtHive/competition-factory-server.git#${SERVER_REF:?Set SERVER_REF in sources.env}
+
+  web:
+    image: tmx-local-web:latest
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      additional_contexts:
+        source: https://github.com/CourtHive/TMX.git#${TMX_REF:?Set TMX_REF in sources.env}

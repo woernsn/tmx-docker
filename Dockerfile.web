@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+RUN npm install --global pnpm@12.6.0
+COPY --from=source / /app/
+
+# Upstream workspace links refer to sibling development checkouts. Install the
+# published package versions declared in TMX instead.
+RUN npm pkg delete scripts.postinstall \
+    && sed -i '/link:\.\.\//d' pnpm-workspace.yaml \
+    && HUSKY=0 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --no-frozen-lockfile
+ENV BASE_URL=tmx ENVIRONMENT=production SERVER= QUERY_SERVER= VITE_ASSISTANT_URL= VITE_SCORE_RELAY_URL=
+RUN pnpm build
+
+FROM nginx:stable-alpine
+COPY --from=build /app/dist/ /usr/share/nginx/html/
+EXPOSE 80

@@ -1,0 +1,56 @@
+name: Update upstream sources
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: update-upstream-sources
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check source-selection tests
+        id: source_tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Select newest compatible upstream commits
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp sources.env "$RUNNER_TEMP/candidate-sources.env"
+          python3 scripts/update_sources.py --sources "$RUNNER_TEMP/candidate-sources.env"
+          if cmp -s sources.env "$RUNNER_TEMP/candidate-sources.env"; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v4
+        if: steps.candidate.outputs.changed == 'true'
+      - name: Test proposed image pair in Compose
+        id: smoke
+        if: steps.candidate.outputs.changed == 'true'
+        run: bash scripts/smoke_stack.sh "$RUNNER_TEMP/candidate-sources.env"
+      - name: Commit updated pins and build images
+        if: ${{ success() && steps.candidate.outputs.changed == 'true' && steps.source_tests.outcome == 'success' && steps.smoke.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/candidate-sources.env" sources.env
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add sources.env
+          git commit -m 'chore: update upstream source commits'
+          git push origin HEAD:main
+          gh workflow run publish-images.yml --ref main

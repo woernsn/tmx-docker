@@ -1,0 +1,8 @@
+services:
+  server:
+    image: tmx-smoke-server:local
+    pull_policy: never
+
+  web:
+    image: tmx-smoke-web:local
+    pull_policy: never

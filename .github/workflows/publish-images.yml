@@ -1,0 +1,108 @@
+name: Publish TMX images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check pinned factory versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          source ./sources.env
+          tmx_version=$(curl --fail --silent --show-error --retry 3 "https://raw.githubusercontent.com/CourtHive/TMX/${TMX_REF}/package.json" | jq -r '.dependencies["tods-competition-factory"]')
+          server_version=$(curl --fail --silent --show-error --retry 3 "https://raw.githubusercontent.com/CourtHive/competition-factory-server/${SERVER_REF}/package.json" | jq -r '.dependencies["tods-competition-factory"]')
+          test -n "$tmx_version"
+          test "$tmx_version" != null
+          test "$tmx_version" = "$server_version"
+          echo "Both upstream sources use tods-competition-factory ${tmx_version}"
+
+  smoke:
+    needs: verify-sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check source-selection tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - uses: docker/setup-buildx-action@v4
+      - name: Test image pair in Compose
+        run: bash scripts/smoke_stack.sh sources.env
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [web, server]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select pinned upstream source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source ./sources.env
+          if [[ '${{ matrix.component }}' == web ]]; then
+            echo "context=https://github.com/CourtHive/TMX.git#${TMX_REF}" >> "$GITHUB_OUTPUT"
+          else
+            echo "context=https://github.com/CourtHive/competition-factory-server.git#${SERVER_REF}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile.${{ matrix.component }}
+          build-contexts: |
+            source=${{ steps.source.outputs.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ steps.source.outputs.owner }}/tmx-docker-${{ matrix.component }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  promote-latest:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Normalize image namespace
+        id: registry
+        shell: bash
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote the successful image pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          namespace="ghcr.io/${{ steps.registry.outputs.owner }}"
+          docker buildx imagetools create --tag "${namespace}/tmx-docker-server:latest" "${namespace}/tmx-docker-server:sha-${GITHUB_SHA}"
+          docker buildx imagetools create --tag "${namespace}/tmx-docker-web:latest" "${namespace}/tmx-docker-web:sha-${GITHUB_SHA}"
