@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Providers · TMX administration{% endblock %}
+{% block content %}
+<div class="page-heading"><p class="eyebrow">Organization setup</p><h1>Providers</h1><p>Select a provider to manage its users, or select one of its tournaments to manage access.</p></div>
+<div class="provider-layout">
+  <aside class="provider-sidebar">
+    <h2>Providers</h2>
+    <nav aria-label="Providers">
+      <ul class="provider-menu">
+        {% for provider in providers %}
+        <li><a class="provider-menu-link{% if selected and selected.organisationId == provider.organisationId %} is-active{% endif %}" href="{{ url_for('providers', id=provider.organisationId) }}"{% if selected and not tournament_id and selected.organisationId == provider.organisationId %} aria-current="page"{% endif %}>
+          <span class="provider-menu-name">{{ provider.organisationName }}</span>
+          <span class="provider-menu-meta">{{ provider.organisationAbbreviation }}</span>
+        </a>
+          {% if selected and selected.organisationId == provider.organisationId %}
+          <ul class="tournament-menu" aria-label="Tournaments in {{ provider.organisationName }}">
+            {% for entry in tournaments %}
+            <li><a class="tournament-menu-link{% if tournament_id == entry.tournamentId %} is-active{% endif %}" href="{{ url_for('providers', id=provider.organisationId, tournament=entry.tournamentId) }}"{% if tournament_id == entry.tournamentId %} aria-current="page"{% endif %}>{{ entry.tournament.tournamentName or entry.tournamentId }}</a></li>
+            {% else %}<li class="tournament-menu-empty">No tournaments yet</li>{% endfor %}
+            {% if paging.offset|default(0) > 0 %}<li><a class="tournament-menu-page" href="{{ url_for('providers', id=provider.organisationId, offset=[0, paging.offset - paging.limit]|max) }}">Previous tournaments</a></li>{% endif %}
+            {% if paging.hasMore %}<li><a class="tournament-menu-page" href="{{ url_for('providers', id=provider.organisationId, offset=paging.offset + paging.limit) }}">More tournaments</a></li>{% endif %}
+          </ul>
+          {% endif %}
+        </li>
+        {% endfor %}
+        <li><a class="provider-menu-link provider-add-link{% if create_mode %} is-active{% endif %}" href="{{ url_for('providers', new=1) }}"{% if create_mode %} aria-current="page"{% endif %}><span aria-hidden="true">＋</span> Add new...</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="provider-content">
+    {% if message %}<p class="notice success" role="status">{{ message }}</p>{% endif %}
+    {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+    {% if create_mode %}
+    <section class="card">
+      <p class="eyebrow">New provider</p><h2>Add a provider</h2>
+      <p>Give the provider a name and a unique abbreviation.</p>
+      <form method="post" action="{{ url_for('providers') }}" class="grid-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label>Abbreviation <input name="abbreviation" maxlength="32" placeholder="CLUB" required></label>
+        <label>Name <input name="name" maxlength="200" placeholder="My Club" required></label>
+        <button type="submit">Add provider</button>
+      </form>
+    </section>
+    {% elif tournament_record %}
+    <section class="card">
+      <p class="eyebrow">{{ selected.organisationName }} · Tournament</p>
+      <h2>{{ tournament_record.tournamentName }}</h2>
+      <p>Tournament ID: <code>{{ tournament_id }}</code></p>
+      <h3>Grant access</h3>
+      {% if eligible %}<form method="post" action="{{ url_for('grant') }}" class="grid-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="tournament_id" value="{{ tournament_id }}">
+        <label>User <select name="email" required><option value="">Choose a user</option>{% for user in eligible %}<option value="{{ user.email }}">{{ user.email }}</option>{% endfor %}</select></label>
+        <label>Role <select name="role"><option value="DIRECTOR">Director</option><option value="SCORER">Scorer</option><option value="OBSERVER">Observer</option></select></label>
+        <button type="submit">Grant access</button>
+      </form>{% else %}<p>No eligible users. Add a user to this provider first.</p>{% endif %}
+    </section>
+    <section class="card"><h2>Current assignments</h2>
+      {% if assignments %}<div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th></th></tr></thead><tbody>
+      {% for assignment in assignments %}<tr><td>{{ assignment.email }}</td><td>{{ assignment.assignmentRole }}</td><td><form method="post" action="{{ url_for('revoke') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="tournament_id" value="{{ tournament_id }}"><input type="hidden" name="email" value="{{ assignment.email }}"><button class="danger" type="submit">Revoke</button></form></td></tr>{% endfor %}
+      </tbody></table></div>{% else %}<p>No assignments yet.</p>{% endif %}
+    </section>
+    {% elif selected %}
+    <section class="card">
+      <p class="eyebrow">Selected provider</p><h2>{{ selected.organisationName }}</h2>
+      <p>{{ selected.organisationAbbreviation }} · <code>{{ selected.organisationId }}</code></p>
+      <h3>Users and roles</h3>
+      {% if members %}<div class="table-wrap"><table><thead><tr><th>Email</th><th>Provider role</th><th></th></tr></thead><tbody>
+      {% for member in members %}<tr><td>{{ member.email }}</td><td>{{ member.providerRole }}</td><td><form method="post" action="{{ url_for('disassociate_user') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="provider_id" value="{{ selected.organisationId }}"><input type="hidden" name="user_id" value="{{ member.userId }}"><button class="danger" type="submit">Remove from provider</button></form></td></tr>{% endfor %}
+      </tbody></table></div>{% else %}<p>No users belong to this provider yet.</p>{% endif %}
+    </section>
+    <section class="card">
+      <h2>Add a user</h2>
+      <p>Select an existing user. If they already belong to this provider, this changes their role.</p>
+      <form method="post" action="{{ url_for('associate_user') }}" class="grid-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="provider_id" value="{{ selected.organisationId }}">
+        <label>User <select name="user_id" required><option value="">Choose a user</option>{% for user in users %}<option value="{{ user.userId }}">{{ user.email }}</option>{% endfor %}</select></label>
+        <label>Provider role <select name="role"><option value="DIRECTOR">Director</option><option value="PROVIDER_ADMIN">Provider admin</option></select></label>
+        <button type="submit">Add or update role</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

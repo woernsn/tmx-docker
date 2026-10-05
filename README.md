@@ -19,6 +19,7 @@ change their source code or require local checkouts of them.
 | --- | --- |
 | `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx. nginx also forwards API and Socket.IO requests to `server` on the same origin. |
 | `server` (`tmx-docker-server`) | The Competition Factory server, which handles accounts and tournament records and applies tournament mutations. |
+| `manager` (`tmx-manager`) | A small Flask administration UI for providers, user accounts, provider memberships, and tournament access. It calls the CF server API and is built from this repository. |
 | `postgres` | Persistent storage for accounts and tournament records. |
 | `redis` | Disposable cache used by the server. |
 
@@ -28,6 +29,26 @@ The images and Compose file provide the core tournament management stack.
 CourtHive services such as the public viewer, query service, persons,
 declarations, assistant, and score relay are outside this stack; features that
 depend on them need those services configured separately.
+
+## Manager
+
+`manager` is a helper container developed in this repository. It is not a
+CourtHive component. Its Flask web UI calls the Competition Factory server's
+REST API and starts with the rest of the Compose stack. Open it at
+<http://localhost:8081/> by default and sign in with the initial CF server
+administrator account.
+
+The UI provides:
+
+- **Providers:** Create providers, view their users and roles, and add, change,
+  or remove provider memberships.
+- **Users:** Create and delete accounts and change passwords. Generated and
+  reset passwords are displayed once so they can be given to the user.
+- **Tournaments:** Browse tournaments nested under their provider and grant or
+  revoke user access as Director, Scorer, or Observer.
+
+The address is configured with `MANAGER_BIND_ADDRESS` and `MANAGER_HTTP_PORT`
+in `.env`. Set `MANAGER_COOKIE_SECURE=true` when serving the UI through HTTPS.
 
 ## Run with Docker Compose
 
@@ -51,7 +72,13 @@ depend on them need those services configured separately.
    docker compose exec server node src/scripts/admin-user.mjs create --email admin@example.com --password 'choose-a-password'
    ```
 
-4. Open <http://localhost:8080/tmx/> and sign in.
+4. Open the management UI at <http://localhost:8081/> and sign in with the
+   **same administrator email and password** from step 3. Use **Add new...**
+   on the Providers page to create a provider with a unique abbreviation.
+
+5. Open TMX at <http://localhost:8080/tmx/> and sign in. Select the provider
+   when creating a tournament. Find it nested under that provider in the
+   management UI to assign users to it.
 
 ## Configuration
 
@@ -65,10 +92,15 @@ The settings in [`.env.example`](.env.example) are:
 | `HTTP_PORT` | Host port for TMX; defaults to `8080`. |
 | `BIND_ADDRESS` | Host address to bind; defaults to `127.0.0.1` for local access only. |
 | `PUBLIC_ORIGIN` | Browser-visible origin, such as `http://localhost:8080` or `https://tmx.example.com`. It must match the address used to reach the application. |
+| `MANAGER_HTTP_PORT` | Host port for the management UI; defaults to `8081`. |
+| `MANAGER_BIND_ADDRESS` | Host address for the management UI; defaults to `127.0.0.1`. |
+| `MANAGER_COOKIE_SECURE` | Set to `true` when the management UI is served through HTTPS. |
 
 For access from other machines, put HTTPS in front of the web service, set
 `PUBLIC_ORIGIN` to the external origin, and set `BIND_ADDRESS` to an address your
-reverse proxy can reach. PostgreSQL and Redis are accessible only within the
+reverse proxy can reach. For remote management UI access, also expose
+`MANAGER_BIND_ADDRESS` through an HTTPS reverse proxy and set
+`MANAGER_COOKIE_SECURE=true`. PostgreSQL and Redis are accessible only within the
 Compose network. If the application images are private, authenticate Docker to
 the registry before starting the stack.
 
@@ -79,8 +111,9 @@ competition-factory-server (`SERVER_REF`). The pinned projects must declare the
 same `tods-competition-factory` version. Change those commits to select a
 different upstream pair; no local upstream checkout is needed.
 
-With `.env` configured as above, build both images from the pinned commits and
-run them using the [local Compose override](compose.local.yaml):
+With `.env` configured as above, build the web and server images from the
+pinned commits and run the stack using the
+[local Compose override](compose.local.yaml):
 
 ```sh
 docker compose --env-file .env --env-file sources.env \
@@ -90,8 +123,9 @@ docker compose --env-file .env --env-file sources.env \
 ```
 
 The override uses local image names and prevents Compose from pulling the
-application images; `IMAGE_TAG` applies only to the prebuilt images. Use the
-same administrator command and URL from the previous section. To run the
+application images; `IMAGE_TAG` applies only to the prebuilt images. The
+management UI is built locally by either Compose command. Use the same
+administrator command and URLs from the previous section. To run the
 repository's integration check against the pinned pair, use
 `bash scripts/smoke_stack.sh sources.env`; it starts a temporary stack
 and removes its test database afterward.

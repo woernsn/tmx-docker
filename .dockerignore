@@ -1,0 +1,5 @@
+.git
+.env
+*.sql
+**/__pycache__/
+**/*.pyc

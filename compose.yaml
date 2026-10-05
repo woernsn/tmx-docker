@@ -82,6 +82,27 @@ services:
       timeout: 5s
       retries: 5
 
+  manager:
+    image: tmx-manager:local
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    pull_policy: build
+    restart: unless-stopped
+    ports:
+      - '${MANAGER_BIND_ADDRESS:-127.0.0.1}:${MANAGER_HTTP_PORT:-8081}:8081'
+    environment:
+      TMX_API_URL: http://server:8383
+      MANAGER_COOKIE_SECURE: ${MANAGER_COOKIE_SECURE:-false}
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 configs:
   nginx_config:
     file: ./nginx.conf

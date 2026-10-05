@@ -1,0 +1,10 @@
+FROM python:3.13-alpine
+
+WORKDIR /app
+COPY manager/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY manager/ ./
+RUN adduser -D -H manager && chown -R manager:manager /app
+USER manager
+EXPOSE 8081
+CMD ["gunicorn", "--bind", "0.0.0.0:8081", "--workers", "1", "--threads", "4", "--access-logfile", "-", "app:app"]
