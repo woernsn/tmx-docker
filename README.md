@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.svg" alt="TMX Docker: all-in-one TMX service" width="480"></p>
+<p align="center"><img src="assets/banner.svg" alt="TMX Docker: all-in-one TMX service" width="650"></p>
 
 # TMX Docker
 
