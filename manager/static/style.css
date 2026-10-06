@@ -21,8 +21,10 @@ a:focus-visible { outline: 2px solid var(--chc-border-focus); outline-offset: 2p
   border-top: 4px solid var(--chc-container-primary);
   border-bottom: 1px solid var(--chc-border-primary);
 }
-.brand { color: var(--chc-text-primary); font-size: 1.2rem; font-weight: 800; text-decoration: none; }
-.brand span { font-weight: 400; }
+.brand { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--chc-text-primary); font-size: 1.2rem; font-weight: 800; text-decoration: none; }
+.brand-logo { display: block; width: 2.5rem; height: 2.5rem; flex: none; }
+.brand-text { font-weight: 800; }
+.brand-text span { font-weight: 400; }
 .topbar nav { display: flex; gap: 1.5rem; flex: 1; flex-wrap: wrap; }
 .topbar nav a { color: var(--chc-text-secondary); text-decoration: none; font-weight: 600; }
 .topbar nav a:hover, .topbar nav a[aria-current="page"] { color: #006b60; }

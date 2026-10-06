@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 280" role="img" aria-labelledby="title desc">
+  <title id="title">TMX Docker</title>
+  <desc id="desc">A tennis court and ball inside one hexagon.</desc>
+  <rect width="280" height="280" rx="40" fill="#102f3b"/>
+  <path d="M140 24 248 86v108l-108 62-108-62V86Z" fill="#08796e" stroke="#70d4bb" stroke-width="8"/>
+  <g fill="none" stroke="#f3fbf7" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="98" y="75" width="84" height="130" rx="2"/>
+    <path d="M98 140h84m-42-32v64"/>
+  </g>
+  <circle cx="182" cy="102" r="18" fill="#f7cf65" stroke="#102f3b" stroke-width="5"/>
+</svg>

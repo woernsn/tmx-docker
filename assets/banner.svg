@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 280" role="img" aria-labelledby="title desc">
+  <title id="title">TMX Docker</title>
+  <desc id="desc">An all-in-one TMX service, represented by a tennis court inside one hexagon.</desc>
+  <rect width="960" height="280" rx="36" fill="#102f3b"/>
+  <path d="M134 30 232 86v108l-98 56-98-56V86Z" fill="#08796e" stroke="#70d4bb" stroke-width="7"/>
+  <g fill="none" stroke="#f3fbf7" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="96" y="78" width="76" height="124" rx="2"/>
+    <path d="M96 140h76m-38-32v64"/>
+  </g>
+  <circle cx="172" cy="103" r="16" fill="#f7cf65" stroke="#102f3b" stroke-width="5"/>
+  <text x="282" y="126" fill="#f3fbf7" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700">TMX Docker</text>
+  <text x="286" y="183" fill="#70d4bb" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" letter-spacing="2">ALL-IN-ONE TMX SERVICE</text>
+</svg>
