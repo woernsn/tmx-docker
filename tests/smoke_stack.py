@@ -105,7 +105,7 @@ def main():
         "email": "director@example.invalid"})
     assert "Password (shown once)" in users_page, "Management UI did not create a user"
     assert "name=\"provider_id\"" not in users_page, "Users page still manages provider membership"
-    user_menu = re.search(r'<ul class="user-menu">(.*?)</ul>', users_page, re.S)
+    user_menu = re.search(r'<ul class="user-menu(?: [^"]*)?">(.*?)</ul>', users_page, re.S)
     assert user_menu and "Add new..." in re.findall(r"<li>.*?</li>", user_menu.group(1), re.S)[-1], \
         "Add new is not the last user menu item"
     assert "Add a user" in page("/users?new=1")
