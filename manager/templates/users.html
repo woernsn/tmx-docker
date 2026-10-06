@@ -3,10 +3,10 @@
 {% block content %}
 <div class="page-heading"><p class="eyebrow">Accounts</p><h1>Users</h1><p>Select an account to change its password or delete it.</p></div>
 <div class="user-layout">
-  <aside class="user-sidebar">
-    <h2>Users</h2>
+  <aside class="user-sidebar menu">
+    <h2 class="menu-label">Users</h2>
     <nav aria-label="Users">
-      <ul class="user-menu">
+      <ul class="user-menu menu-list">
         {% for user in users %}
         <li><a class="user-menu-link{% if selected and selected.userId == user.userId %} is-active{% endif %}" href="{{ url_for('users', id=user.userId) }}"{% if selected and selected.userId == user.userId %} aria-current="page"{% endif %}>{{ user.email }}</a></li>
         {% endfor %}
@@ -15,16 +15,16 @@
     </nav>
   </aside>
   <div class="user-content">
-    {% if message %}<p class="notice success" role="status">{{ message }}</p>{% endif %}
-    {% if shown_password %}<div class="notice warning" role="status"><strong>Password (shown once):</strong> <code>{{ shown_password }}</code><p>{{ password_note }}</p></div>{% endif %}
+    {% if message %}<p class="notification is-success is-light" role="status">{{ message }}</p>{% endif %}
+    {% if shown_password %}<div class="notification is-warning is-light" role="status"><strong>Password (shown once):</strong> <code>{{ shown_password }}</code><p>{{ password_note }}</p></div>{% endif %}
     {% if create_mode %}
     <section class="card">
       <p class="eyebrow">New account</p><h2>Add a user</h2>
       <p>After creating the account, add the user to a provider on the <a href="{{ url_for('providers') }}">Providers page</a>.</p>
       <form method="post" action="{{ url_for('users') }}" class="grid-form">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <label>Email <input name="email" type="email" required></label>
-        <button type="submit">Create user</button>
+        <label class="field"><span class="label">Email</span><input class="input" name="email" type="email" required></label>
+        <button class="button is-primary" type="submit">Create user</button>
       </form>
     </section>
     {% elif selected %}
@@ -34,9 +34,9 @@
       <p>Leave the new password blank to generate one. Existing sessions for this user will be invalidated.</p>
       <form method="post" action="{{ url_for('reset_password') }}" class="grid-form">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="email" value="{{ selected.email }}">
-        <label>New password (optional) <input name="new_password" type="password" autocomplete="new-password"></label>
-        <label>Confirm password <input name="confirm_password" type="password" autocomplete="new-password"></label>
-        <button type="submit">Change password</button>
+        <label class="field"><span class="label">New password (optional)</span><input class="input" name="new_password" type="password" autocomplete="new-password"></label>
+        <label class="field"><span class="label">Confirm password</span><input class="input" name="confirm_password" type="password" autocomplete="new-password"></label>
+        <button class="button is-primary" type="submit">Change password</button>
       </form>
     </section>
     <section class="card">
@@ -46,8 +46,8 @@
       <p>This deletes the account. To remove it from one provider only, use the Providers page.</p>
       <form method="post" action="{{ url_for('remove_user') }}" class="grid-form">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="email" value="{{ selected.email }}">
-        <label>Confirm email <input name="confirm_email" type="email" placeholder="Type {{ selected.email }}" required></label>
-        <button class="danger" type="submit">Delete user</button>
+        <label class="field"><span class="label">Confirm email</span><input class="input" name="confirm_email" type="email" placeholder="Type {{ selected.email }}" required></label>
+        <button class="button is-danger" type="submit">Delete user</button>
       </form>
       {% endif %}
     </section>

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}TMX administration{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='courthive-components.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,12 +12,12 @@
     <a class="brand" href="{{ url_for('providers') }}">TMX <span>Administration</span></a>
     {% if g.session and g.session.token %}
     <nav aria-label="Main navigation">
-      <a href="{{ url_for('providers') }}">Providers</a>
-      <a href="{{ url_for('users') }}">Users</a>
+      <a href="{{ url_for('providers') }}"{% if request.endpoint in ('providers', 'associate_user', 'disassociate_user', 'grant', 'revoke') %} aria-current="page"{% endif %}>Providers</a>
+      <a href="{{ url_for('users') }}"{% if request.endpoint in ('users', 'reset_password', 'remove_user') %} aria-current="page"{% endif %}>Users</a>
     </nav>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <button class="text-button" type="submit">Sign out</button>
+      <button class="button is-light signout-button" type="submit">Sign out</button>
     </form>
     {% endif %}
   </header>

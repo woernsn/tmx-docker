@@ -30,6 +30,24 @@ CourtHive services such as the public viewer, query service, persons,
 declarations, assistant, and score relay are outside this stack; features that
 depend on them need those services configured separately.
 
+## CourtHive components and versions
+
+| Original repository | How this stack uses it | Version selection |
+| --- | --- | --- |
+| [TMX](https://github.com/CourtHive/TMX) | Builds the browser application in the `web` image. | `TMX_REF` in [`sources.env`](sources.env) pins a full upstream commit for local builds and published images. |
+| [competition-factory-server](https://github.com/CourtHive/competition-factory-server) | Builds the `server` image, which stores accounts and tournament records and exposes the API used by TMX and the manager. | `SERVER_REF` in [`sources.env`](sources.env) pins a separate full upstream commit. |
+| [Competition Factory](https://github.com/CourtHive/competition-factory) (`tods-competition-factory`) | Supplies tournament rules and record operations to both TMX and the server; the manager uses it through the server API. | Each pinned upstream project declares its package version. CI requires the two declarations to match before publishing the image pair. |
+| [courthive-components](https://github.com/CourtHive/courthive-components) | The manager serves its CSS locally for `button`, form field, select, menu, and notification styles. TMX uses the library in its own build. | The manager's copied CSS bundle is fixed at **6.2.0** in [`manager/static/courthive-components.css`](manager/static/courthive-components.css), independently of the TMX and server pins. |
+
+The weekly [source update workflow](.github/workflows/update-sources.yml) selects
+the newest TMX and server commits that declare the same Competition Factory
+version, runs the stack smoke test, then updates `sources.env`. The
+[publishing workflow](.github/workflows/publish-images.yml) builds both images
+from those commits. In Compose, `IMAGE_TAG=latest` selects the latest published
+pair; `IMAGE_TAG=sha-<this-repository-commit>` selects a specific pair. The
+manager image is built locally from this repository and does not use
+`IMAGE_TAG`.
+
 ## Manager
 
 `manager` is a helper container developed in this repository. It is not a
@@ -37,6 +55,14 @@ CourtHive component. Its Flask web UI calls the Competition Factory server's
 REST API and starts with the rest of the Compose stack. Open it at
 <http://localhost:8081/> by default and sign in with the initial CF server
 administrator account.
+
+The manager serves the CSS bundle from
+[courthive-components](https://github.com/CourtHive/courthive-components)
+version 6.2.0 locally. Its forms, buttons, menus, and notices use the shared
+classes; TMX's own dependency version is determined by its pinned source
+commit. The Flask application has no Node.js runtime or external stylesheet
+request. The bundled stylesheet's license is in
+[`manager/COURTHIVE-COMPONENTS-LICENSE`](manager/COURTHIVE-COMPONENTS-LICENSE).
 
 The UI provides:
 
