@@ -19,16 +19,17 @@ change their source code or require local checkouts of them.
 
 | Service | Purpose |
 | --- | --- |
-| `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx. nginx also forwards API and Socket.IO requests to `server` on the same origin. |
+| `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx at `/tmx/`. nginx also serves the public viewer at `/pub/` and forwards API and Socket.IO requests to `server` on the same origin. |
 | `server` (`tmx-docker-server`) | The Competition Factory server, which handles accounts and tournament records and applies tournament mutations. |
+| `pub` (`tmx-docker-pub`) | The [courthive-public](https://github.com/CourtHive/courthive-public) browser application for published tournaments. |
 | `manager` (`tmx-manager`) | A small Flask administration UI for providers, user accounts, provider memberships, and tournament access. It calls the CF server API and is built from this repository. |
 | `postgres` | Persistent storage for accounts and tournament records. |
 | `redis` | Disposable cache used by the server. |
 
-The TMX web and server images are separate images and should use the same
-`IMAGE_TAG`. Both contain a compatible version of the Competition Factory.
+The TMX web, server, and public viewer are separate images and should use the
+same `IMAGE_TAG`. All three contain a compatible version of the Competition Factory.
 The images and Compose file provide the core tournament management stack.
-CourtHive services such as the public viewer, query service, persons,
+CourtHive services such as the query service, persons,
 declarations, assistant, and score relay are outside this stack; features that
 depend on them need those services configured separately.
 
@@ -38,15 +39,16 @@ depend on them need those services configured separately.
 | --- | --- | --- |
 | [TMX](https://github.com/CourtHive/TMX) | Builds the browser application in the `web` image. | `TMX_REF` in [`sources.env`](sources.env) pins a full upstream commit for local builds and published images. |
 | [competition-factory-server](https://github.com/CourtHive/competition-factory-server) | Builds the `server` image, which stores accounts and tournament records and exposes the API used by TMX and the manager. | `SERVER_REF` in [`sources.env`](sources.env) pins a separate full upstream commit. |
-| [Competition Factory](https://github.com/CourtHive/competition-factory) (`tods-competition-factory`) | Supplies tournament rules and record operations to both TMX and the server; the manager uses it through the server API. | Each pinned upstream project declares its package version. CI requires the two declarations to match before publishing the image pair. |
+| [courthive-public](https://github.com/CourtHive/courthive-public) | Builds the `pub` image for browsing published tournaments at `/pub/`. | `PUB_REF` in [`sources.env`](sources.env) pins a full upstream commit. |
+| [Competition Factory](https://github.com/CourtHive/competition-factory) (`tods-competition-factory`) | Supplies tournament rules and record operations to TMX, the server, and the public viewer; the manager uses it through the server API. | Each pinned upstream project declares its package version. CI requires all three declarations to match before publishing the images. |
 | [courthive-components](https://github.com/CourtHive/courthive-components) | The manager serves its CSS locally for `button`, form field, select, menu, and notification styles. TMX uses the library in its own build. | The manager's copied CSS bundle is fixed at **6.2.0** in [`manager/static/courthive-components.css`](manager/static/courthive-components.css), independently of the TMX and server pins. |
 
 The weekly [source update workflow](.github/workflows/update-sources.yml) selects
-the newest TMX and server commits that declare the same Competition Factory
+the newest TMX, server, and public viewer commits that declare the same Competition Factory
 version, runs the stack smoke test, then updates `sources.env`. The
-[publishing workflow](.github/workflows/publish-images.yml) builds both images
+[publishing workflow](.github/workflows/publish-images.yml) builds all three images
 from those commits. In Compose, `IMAGE_TAG=latest` selects the latest published
-pair; `IMAGE_TAG=sha-<this-repository-commit>` selects a specific pair. The
+set; `IMAGE_TAG=sha-<this-repository-commit>` selects a specific set. The
 manager image is built locally from this repository and does not use
 `IMAGE_TAG`.
 
@@ -106,7 +108,8 @@ in `.env`. Set `MANAGER_COOKIE_SECURE=true` when serving the UI through HTTPS.
 
 5. Open TMX at <http://localhost:8080/tmx/> and sign in. Select the provider
    when creating a tournament. Find it nested under that provider in the
-   management UI to assign users to it.
+   management UI to assign users to it. Published tournaments are available
+   through the public viewer at <http://localhost:8080/pub/>.
 
 ## Configuration
 
@@ -116,7 +119,7 @@ The settings in [`.env.example`](.env.example) are:
 | --- | --- |
 | `PG_PASSWORD` | Required password for the PostgreSQL database. |
 | `JWT_SECRET` | Required secret for server authentication tokens; use a different value from `PG_PASSWORD`. |
-| `IMAGE_TAG` | Tag used by both application images. `latest` follows updates; a `sha-...` tag keeps a specific image pair. |
+| `IMAGE_TAG` | Tag used by all three application images. `latest` follows updates; a `sha-...` tag keeps a specific image set. |
 | `HTTP_PORT` | Host port for TMX; defaults to `8080`. |
 | `BIND_ADDRESS` | Host address to bind; defaults to `127.0.0.1` for local access only. |
 | `PUBLIC_ORIGIN` | Browser-visible origin, such as `http://localhost:8080` or `https://tmx.example.com`. It must match the address used to reach the application. |
@@ -134,12 +137,13 @@ the registry before starting the stack.
 
 ## Build the images locally
 
-[`sources.env`](sources.env) pins full commits of TMX (`TMX_REF`) and
-competition-factory-server (`SERVER_REF`). The pinned projects must declare the
-same `tods-competition-factory` version. Change those commits to select a
-different upstream pair; no local upstream checkout is needed.
+[`sources.env`](sources.env) pins full commits of TMX (`TMX_REF`),
+competition-factory-server (`SERVER_REF`), and courthive-public (`PUB_REF`).
+The pinned projects must declare the same `tods-competition-factory` version.
+Change those commits to select different upstream versions; no local upstream
+checkout is needed.
 
-With `.env` configured as above, build the web and server images from the
+With `.env` configured as above, build the web, server, and public viewer images from the
 pinned commits and run the stack using the
 [local Compose override](compose.local.yaml):
 
@@ -169,6 +173,6 @@ docker compose exec -T postgres pg_dump -U tmx -d tmx > tmx-backup.sql
 ```
 
 For prebuilt images, change `IMAGE_TAG` in `.env` and run `docker compose up -d`
-to use the selected pair. For a local build, change `sources.env`, then repeat
+to use the selected image set. For a local build, change `sources.env`, then repeat
 the build and start commands above. `docker compose down` stops the stack while
 keeping the PostgreSQL volume.

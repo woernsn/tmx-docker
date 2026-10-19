@@ -78,6 +78,18 @@ def main():
     bundle = request(asset_path)
     assert bundle and b"<html" not in bundle.lower(), "TMX JavaScript bundle was not served"
 
+    pub_html = request("/pub/").decode()
+    assert "<html" in pub_html.lower(), "Public viewer page was not served"
+    assert '/pub/tmx-docker-config.js' in pub_html, "Public viewer origin configuration is missing"
+    pub_config = request("/pub/tmx-docker-config.js")
+    assert b"window.location.origin" in pub_config, "Public viewer API origin is not configured"
+    pub_asset = re.search(r'<script[^>]+type="module"[^>]+src="([^"]+\.js)"', pub_html)
+    assert pub_asset, "Public viewer page has no JavaScript bundle"
+    pub_asset_path = urllib.parse.urljoin("/pub/", pub_asset.group(1))
+    pub_bundle = request(pub_asset_path)
+    assert len(pub_bundle) > 1000 and not pub_bundle.lstrip().lower().startswith(b"<!doctype html"), \
+        "Public viewer JavaScript bundle was not served"
+
     login = request("/auth/login", {
         "email": "smoke@example.invalid",
         "password": os.environ["SMOKE_PASSWORD"],
@@ -244,6 +256,11 @@ process.stdout.write(JSON.stringify(result.drawDefinition));
     event = next(e for e in fetch()["events"] if e["eventId"] == event_id)
     draws = event.get("drawDefinitions") or []
     assert draws and draws[0].get("structures"), f"Draw was not saved: {event}"
+    mutate("publishTournamentInfo", {})
+    mutate("publishEvent", {"eventId": event_id})
+    public_info = request("/factory/tournamentinfo", {"tournamentId": tournament_id, "usePublishState": True})
+    assert public_info.get("tournamentInfo", {}).get("tournamentId") == tournament_id, \
+        f"Published tournament was not available to the public viewer: {public_info}"
     try:
         page("/users/remove", {"csrf": csrf(page("/users")),
             "email": "director@example.invalid", "confirm_email": "wrong@example.invalid"})
@@ -256,7 +273,7 @@ process.stdout.write(JSON.stringify(result.drawDefinition));
     assert "User removed: director@example.invalid" in removed_page
     users = expect_success("/auth/allusers", {}, token)["users"]
     assert not any(u["value"]["email"] == "director@example.invalid" for u in users)
-    print(f"Smoke test passed: manager login, provider memberships, account deletion, password reset, tournament access; "
+    print(f"Smoke test passed: TMX and public viewer assets, public tournament API, manager login, provider memberships, account deletion, password reset, tournament access; "
           f"tournament {tournament_id}, four players, one event, one draw")
 
 

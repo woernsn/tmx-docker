@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Build the proposed upstream pair and exercise the actual Compose stack.
+# Build the pinned upstream sources and exercise the actual Compose stack.
 set -euo pipefail
 
 sources_file="${1:-sources.env}"
 source "$sources_file"
 : "${TMX_REF:?Missing TMX_REF}"
 : "${SERVER_REF:?Missing SERVER_REF}"
+: "${PUB_REF:?Missing PUB_REF}"
 
 docker buildx build --platform linux/amd64 --load \
   --build-context "source=https://github.com/CourtHive/TMX.git#${TMX_REF}" \
@@ -13,6 +14,9 @@ docker buildx build --platform linux/amd64 --load \
 docker buildx build --platform linux/amd64 --load \
   --build-context "source=https://github.com/CourtHive/competition-factory-server.git#${SERVER_REF}" \
   --file Dockerfile.server --tag tmx-smoke-server:local .
+docker buildx build --platform linux/amd64 --load \
+  --build-context "source=https://github.com/CourtHive/courthive-public.git#${PUB_REF}" \
+  --file Dockerfile.pub --tag tmx-smoke-pub:local .
 
 export PG_PASSWORD="$(openssl rand -hex 32)"
 export JWT_SECRET="$(openssl rand -hex 32)"

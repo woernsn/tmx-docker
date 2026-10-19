@@ -1,4 +1,4 @@
-# Build both application images from the upstream commits in sources.env.
+# Build all three application images from the upstream commits in sources.env.
 services:
   server:
     image: tmx-local-server:latest
@@ -17,3 +17,12 @@ services:
       dockerfile: Dockerfile.web
       additional_contexts:
         source: https://github.com/CourtHive/TMX.git#${TMX_REF:?Set TMX_REF in sources.env}
+
+  pub:
+    image: tmx-local-pub:latest
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile.pub
+      additional_contexts:
+        source: https://github.com/CourtHive/courthive-public.git#${PUB_REF:?Set PUB_REF in sources.env}

@@ -20,10 +20,12 @@ jobs:
           source ./sources.env
           tmx_version=$(curl --fail --silent --show-error --retry 3 "https://raw.githubusercontent.com/CourtHive/TMX/${TMX_REF}/package.json" | jq -r '.dependencies["tods-competition-factory"]')
           server_version=$(curl --fail --silent --show-error --retry 3 "https://raw.githubusercontent.com/CourtHive/competition-factory-server/${SERVER_REF}/package.json" | jq -r '.dependencies["tods-competition-factory"]')
+          pub_version=$(curl --fail --silent --show-error --retry 3 "https://raw.githubusercontent.com/CourtHive/courthive-public/${PUB_REF}/package.json" | jq -r '.dependencies["tods-competition-factory"]')
           test -n "$tmx_version"
           test "$tmx_version" != null
           test "$tmx_version" = "$server_version"
-          echo "Both upstream sources use tods-competition-factory ${tmx_version}"
+          test "$tmx_version" = "$pub_version"
+          echo "All upstream sources use tods-competition-factory ${tmx_version}"
 
   smoke:
     needs: verify-sources
@@ -33,7 +35,7 @@ jobs:
       - name: Check source-selection tests
         run: python3 -m unittest discover -s tests -p 'test_*.py'
       - uses: docker/setup-buildx-action@v4
-      - name: Test image pair in Compose
+      - name: Test images in Compose
         run: bash scripts/smoke_stack.sh sources.env
 
   publish:
@@ -45,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [web, server]
+        component: [web, server, pub]
     steps:
       - uses: actions/checkout@v6
       - name: Select pinned upstream source
@@ -56,6 +58,8 @@ jobs:
           source ./sources.env
           if [[ '${{ matrix.component }}' == web ]]; then
             echo "context=https://github.com/CourtHive/TMX.git#${TMX_REF}" >> "$GITHUB_OUTPUT"
+          elif [[ '${{ matrix.component }}' == pub ]]; then
+            echo "context=https://github.com/CourtHive/courthive-public.git#${PUB_REF}" >> "$GITHUB_OUTPUT"
           else
             echo "context=https://github.com/CourtHive/competition-factory-server.git#${SERVER_REF}" >> "$GITHUB_OUTPUT"
           fi
@@ -99,10 +103,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Promote the successful image pair
+      - name: Promote the successful images
         shell: bash
         run: |
           set -euo pipefail
           namespace="ghcr.io/${{ steps.registry.outputs.owner }}"
           docker buildx imagetools create --tag "${namespace}/tmx-docker-server:latest" "${namespace}/tmx-docker-server:sha-${GITHUB_SHA}"
           docker buildx imagetools create --tag "${namespace}/tmx-docker-web:latest" "${namespace}/tmx-docker-web:sha-${GITHUB_SHA}"
+          docker buildx imagetools create --tag "${namespace}/tmx-docker-pub:latest" "${namespace}/tmx-docker-pub:sha-${GITHUB_SHA}"
