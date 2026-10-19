@@ -13,7 +13,8 @@ This repository packages TMX with the
 as a self-hosted Docker Compose application. CourtHive has [decided against a
 Docker deployment path for TMX](https://github.com/CourtHive/TMX/pull/1404#issuecomment-5781297529),
 so this is an independent wrapper around the upstream projects. It does not
-change their source code or require local checkouts of them.
+require local checkouts of them. The image builds apply the upstream source
+changes documented at the end of this README.
 
 ## What runs
 
@@ -155,7 +156,7 @@ The override uses local image names and prevents Compose from pulling the
 application images; `IMAGE_TAG` applies only to the prebuilt images. The
 management UI is built locally by either Compose command. Use the same
 administrator command and URLs from the previous section. To run the
-repository's integration check against the pinned pair, use
+repository's integration check against the pinned sources, use
 `bash scripts/smoke_stack.sh sources.env`; it starts a temporary stack
 and removes its test database afterward.
 
@@ -173,3 +174,30 @@ For prebuilt images, change `IMAGE_TAG` in `.env` and run `docker compose up -d`
 to use the selected image set. For a local build, change `sources.env`, then repeat
 the build and start commands above. `docker compose down` stops the stack while
 keeping the PostgreSQL volume.
+
+## License
+
+The original code in this repository is licensed under the [MIT License](LICENSE).
+Upstream code and bundled third-party assets retain their own terms; this
+repository's license does not grant rights to them.
+
+| Component | License information |
+| --- | --- |
+| [TMX](https://github.com/CourtHive/TMX/blob/2791798a59da375c9e0935b066507ef42597c023/LICENSE.txt) | MIT, copyright 2024 Charles Allen. The web image includes its `LICENSE.txt`. |
+| [competition-factory-server](https://github.com/CourtHive/competition-factory-server/blob/6f0662ca17c98c929f46e136362545f5ca7aa359/package.json) | Its `package.json` declares MIT; the pinned source tree has no license file. |
+| [courthive-public](https://github.com/CourtHive/courthive-public/blob/fadcf74248f34cda37e3d4709b8c649159c2236f/README.md) | The pinned source has no license file or package license field. Its README calls it private. Confirm redistribution terms with CourtHive before publishing the `pub` image. |
+| [Competition Factory](https://github.com/CourtHive/competition-factory/blob/master/LICENSE) package | MIT; all three application builds install it as a dependency. |
+| [courthive-components](https://github.com/CourtHive/courthive-components) CSS | MIT; the bundled stylesheet's notice is in [`manager/COURTHIVE-COMPONENTS-LICENSE`](manager/COURTHIVE-COMPONENTS-LICENSE). |
+
+## Upstream source changes during image builds
+
+The Dockerfiles copy the pinned upstream commits into build stages, then make
+these changes before building the images. They do not alter the upstream
+repositories.
+
+| Upstream project | Change in the build stage | Why |
+| --- | --- | --- |
+| TMX | Remove `scripts.postinstall` from `package.json` in [`Dockerfile.web`](Dockerfile.web). | The postinstall script downloads a Playwright browser, which the production web image does not need. |
+| TMX, competition-factory-server, courthive-public | Remove `link:../` overrides from each `pnpm-workspace.yaml` in the respective Dockerfile. | Those links point to sibling development checkouts absent from the Docker build. Installation uses the published package versions declared by each pinned project. |
+| TMX | [`scripts/patch_tmx_root.mjs`](scripts/patch_tmx_root.mjs) adds a root-path case to `src/services/publishing/publicUrl.ts`. The web build also sets `BASE_URL` to empty. | TMX is served at `/`. Without the patch, its localhost fallback sends publish links to the next port instead of this deployment's `/pub/`; the empty base builds TMX assets for `/`. |
+| courthive-public | [`Dockerfile.pub`](Dockerfile.pub) adds [`pub-config.js`](pub-config.js) as `public/tmx-docker-config.js`, inserts its script tag into `index.html`, and sets `BASE_URL=pub`. | The script points the viewer's API and Socket.IO connections at the current origin, where nginx forwards them to the server. The base puts the viewer's assets under `/pub/`. |
