@@ -21,9 +21,7 @@ docker buildx build --platform linux/amd64 --load \
 export PG_PASSWORD="$(openssl rand -hex 32)"
 export JWT_SECRET="$(openssl rand -hex 32)"
 export HTTP_PORT=18080
-export MANAGER_HTTP_PORT=18081
 export BIND_ADDRESS=127.0.0.1
-export MANAGER_BIND_ADDRESS=127.0.0.1
 export MANAGER_COOKIE_SECURE=false
 export PUBLIC_ORIGIN="http://${BIND_ADDRESS}:${HTTP_PORT}"
 

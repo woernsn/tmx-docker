@@ -11,9 +11,11 @@ import urllib.request
 from functools import wraps
 
 from flask import Flask, g, redirect, render_template, request, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 API_URL = os.environ.get("TMX_API_URL", "http://server:8383").rstrip("/")
 COOKIE_SECURE = os.environ.get("MANAGER_COOKIE_SECURE", "false").lower() == "true"
@@ -91,11 +93,11 @@ def secure_response(response):
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; form-action 'self'; frame-ancestors 'none'"
     if g.get("clear_cookie"):
-        response.delete_cookie("manager_session")
+        response.delete_cookie("manager_session", path="/manage")
     elif g.session_id:
         response.set_cookie(
             "manager_session", g.session_id, max_age=SESSION_LIFETIME,
-            httponly=True, secure=COOKIE_SECURE, samesite="Strict",
+            httponly=True, secure=COOKIE_SECURE, samesite="Strict", path="/manage",
         )
     return response
 

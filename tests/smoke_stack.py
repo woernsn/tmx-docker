@@ -12,7 +12,7 @@ from uuid import uuid4
 
 
 BASE = os.environ["PUBLIC_ORIGIN"].rstrip("/")
-MANAGER_BASE = f"http://{os.environ.get('MANAGER_BIND_ADDRESS', '127.0.0.1')}:{os.environ.get('MANAGER_HTTP_PORT', '8081')}"
+MANAGER_BASE = BASE + "/manage"
 
 
 def manager_client():
@@ -30,6 +30,8 @@ def manager_client():
         return match.group(1)
 
     login_page = page("/login")
+    assert 'href="/manage/static/style.css"' in login_page, "Manager assets do not use /manage"
+    assert b".topbar" in urllib.request.urlopen(BASE + "/manage/static/style.css", timeout=30).read()
     login_response = page("/login", {
         "csrf": csrf(login_page),
         "email": "smoke@example.invalid",
@@ -37,6 +39,7 @@ def manager_client():
     })
     assert "Providers" in login_response, "Management login failed"
     assert len(cookies) == 1 and next(iter(cookies)).name == "manager_session"
+    assert next(iter(cookies)).path == "/manage", "Manager cookie is not scoped to /manage"
     assert next(iter(cookies)).value != os.environ["SMOKE_PASSWORD"]
     try:
         page("/providers", {"abbreviation": "NOPE", "name": "Missing CSRF token"})
@@ -70,11 +73,13 @@ def expect_success(path, data, token):
 
 
 def main():
-    html = request("/tmx/").decode()
+    with urllib.request.urlopen(BASE + "/", timeout=30) as response:
+        assert response.url == BASE + "/", "TMX root redirected to a subpath"
+    html = request("/").decode()
     assert "<html" in html.lower(), "TMX page was not served"
     asset = re.search(r'<script[^>]+src="([^"]+\.js)"', html)
     assert asset, "TMX page has no JavaScript bundle"
-    asset_path = urllib.parse.urljoin("/tmx/", asset.group(1))
+    asset_path = urllib.parse.urljoin("/", asset.group(1))
     bundle = request(asset_path)
     assert bundle and b"<html" not in bundle.lower(), "TMX JavaScript bundle was not served"
 

@@ -19,10 +19,10 @@ change their source code or require local checkouts of them.
 
 | Service | Purpose |
 | --- | --- |
-| `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx at `/tmx/`. nginx also serves the public viewer at `/pub/` and forwards API and Socket.IO requests to `server` on the same origin. |
+| `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx at `/`. nginx also serves the public viewer at `/pub/` and the manager at `/manage/`, and forwards API and Socket.IO requests to `server` on the same origin. |
 | `server` (`tmx-docker-server`) | The Competition Factory server, which handles accounts and tournament records and applies tournament mutations. |
 | `pub` (`tmx-docker-pub`) | The [courthive-public](https://github.com/CourtHive/courthive-public) browser application for published tournaments. |
-| `manager` (`tmx-manager`) | A small Flask administration UI for providers, user accounts, provider memberships, and tournament access. It calls the CF server API and is built from this repository. |
+| `manager` (`tmx-manager`) | A small Flask administration UI at `/manage/` for providers, user accounts, provider memberships, and tournament access. It calls the CF server API and is built from this repository. |
 | `postgres` | Persistent storage for accounts and tournament records. |
 | `redis` | Disposable cache used by the server. |
 
@@ -57,7 +57,7 @@ manager image is built locally from this repository and does not use
 `manager` is a helper container developed in this repository. It is not a
 CourtHive component. Its Flask web UI calls the Competition Factory server's
 REST API and starts with the rest of the Compose stack. Open it at
-<http://localhost:8081/> by default and sign in with the initial CF server
+<http://localhost:8080/manage/> by default and sign in with the initial CF server
 administrator account.
 
 The manager serves the CSS bundle from
@@ -77,8 +77,8 @@ The UI provides:
 - **Tournaments:** Browse tournaments nested under their provider and grant or
   revoke user access as Director, Scorer, or Observer.
 
-The address is configured with `MANAGER_BIND_ADDRESS` and `MANAGER_HTTP_PORT`
-in `.env`. Set `MANAGER_COOKIE_SECURE=true` when serving the UI through HTTPS.
+The manager shares the web service's address. Set `MANAGER_COOKIE_SECURE=true`
+when serving the UI through HTTPS.
 
 ## Run with Docker Compose
 
@@ -102,11 +102,11 @@ in `.env`. Set `MANAGER_COOKIE_SECURE=true` when serving the UI through HTTPS.
    docker compose exec server node src/scripts/admin-user.mjs create --email admin@example.com --password 'choose-a-password'
    ```
 
-4. Open the management UI at <http://localhost:8081/> and sign in with the
+4. Open the management UI at <http://localhost:8080/manage/> and sign in with the
    **same administrator email and password** from step 3. Use **Add new...**
    on the Providers page to create a provider with a unique abbreviation.
 
-5. Open TMX at <http://localhost:8080/tmx/> and sign in. Select the provider
+5. Open TMX at <http://localhost:8080/> and sign in. Select the provider
    when creating a tournament. Find it nested under that provider in the
    management UI to assign users to it. Published tournaments are available
    through the public viewer at <http://localhost:8080/pub/>.
@@ -123,14 +123,11 @@ The settings in [`.env.example`](.env.example) are:
 | `HTTP_PORT` | Host port for TMX; defaults to `8080`. |
 | `BIND_ADDRESS` | Host address to bind; defaults to `127.0.0.1` for local access only. |
 | `PUBLIC_ORIGIN` | Browser-visible origin, such as `http://localhost:8080` or `https://tmx.example.com`. It must match the address used to reach the application. |
-| `MANAGER_HTTP_PORT` | Host port for the management UI; defaults to `8081`. |
-| `MANAGER_BIND_ADDRESS` | Host address for the management UI; defaults to `127.0.0.1`. |
 | `MANAGER_COOKIE_SECURE` | Set to `true` when the management UI is served through HTTPS. |
 
 For access from other machines, put HTTPS in front of the web service, set
 `PUBLIC_ORIGIN` to the external origin, and set `BIND_ADDRESS` to an address your
-reverse proxy can reach. For remote management UI access, also expose
-`MANAGER_BIND_ADDRESS` through an HTTPS reverse proxy and set
+reverse proxy can reach. For remote management UI access, set
 `MANAGER_COOKIE_SECURE=true`. PostgreSQL and Redis are accessible only within the
 Compose network. If the application images are private, authenticate Docker to
 the registry before starting the stack.

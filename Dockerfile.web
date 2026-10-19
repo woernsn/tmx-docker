@@ -9,7 +9,9 @@ COPY --from=source / /app/
 RUN npm pkg delete scripts.postinstall \
     && sed -i '/link:\.\.\//d' pnpm-workspace.yaml \
     && HUSKY=0 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --no-frozen-lockfile
-ENV BASE_URL=tmx ENVIRONMENT=production SERVER= QUERY_SERVER= VITE_ASSISTANT_URL= VITE_SCORE_RELAY_URL=
+COPY scripts/patch_tmx_root.mjs /tmp/patch_tmx_root.mjs
+RUN node /tmp/patch_tmx_root.mjs
+ENV BASE_URL= ENVIRONMENT=production SERVER= QUERY_SERVER= VITE_ASSISTANT_URL= VITE_SCORE_RELAY_URL=
 RUN pnpm build
 
 FROM nginx:stable-alpine
