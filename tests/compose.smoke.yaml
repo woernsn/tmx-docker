@@ -6,3 +6,7 @@ services:
   web:
     image: tmx-smoke-web:local
     pull_policy: never
+
+  pub:
+    image: tmx-smoke-pub:local
+    pull_policy: never

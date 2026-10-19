@@ -12,6 +12,7 @@ from pathlib import Path
 UPSTREAMS = {
     "TMX_REF": "https://github.com/CourtHive/TMX.git",
     "SERVER_REF": "https://github.com/CourtHive/competition-factory-server.git",
+    "PUB_REF": "https://github.com/CourtHive/courthive-public.git",
 }
 DEPENDENCY = "tods-competition-factory"
 VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$", re.ASCII)
@@ -62,35 +63,35 @@ def version_key(version: str) -> tuple:
     return (int(major), int(minor), int(patch), prerelease is None, identifiers)
 
 
-def latest_pair(tmx_repo: Path, server_repo: Path) -> tuple[str, str, str]:
-    repos = {"TMX_REF": tmx_repo, "SERVER_REF": server_repo}
+def latest_sources(tmx_repo: Path, server_repo: Path, pub_repo: Path) -> tuple[str, str, str, str]:
+    repos = {"TMX_REF": tmx_repo, "SERVER_REF": server_repo, "PUB_REF": pub_repo}
     refs = {name: git(repo, "rev-parse", "HEAD") for name, repo in repos.items()}
     versions = {name: factory_version(repo, refs[name]) for name, repo in repos.items()}
     if None in versions.values():
         raise ValueError("An upstream HEAD has no tods-competition-factory dependency")
-    while versions["TMX_REF"] != versions["SERVER_REF"]:
+    while len(set(versions.values())) != 1:
         newer = max(repos, key=lambda name: version_key(versions[name]))
         previous = previous_version(repos[newer], refs[newer])
         if previous is None:
             raise ValueError("No shared tods-competition-factory version in upstream history")
         refs[newer], versions[newer] = previous
-    return refs["TMX_REF"], refs["SERVER_REF"], versions["TMX_REF"]
+    return refs["TMX_REF"], refs["SERVER_REF"], refs["PUB_REF"], versions["TMX_REF"]
 
 
-def update_sources(path: Path, tmx_repo: Path, server_repo: Path) -> bool:
-    tmx_ref, server_ref, version = latest_pair(tmx_repo, server_repo)
+def update_sources(path: Path, tmx_repo: Path, server_repo: Path, pub_repo: Path) -> bool:
+    tmx_ref, server_ref, pub_ref, version = latest_sources(tmx_repo, server_repo, pub_repo)
     content = path.read_text()
-    current = dict(re.findall(r"^(TMX_REF|SERVER_REF)=([0-9a-f]{40})$", content, re.MULTILINE))
-    if len(current) == 2:
+    current = dict(re.findall(r"^(TMX_REF|SERVER_REF|PUB_REF)=([0-9a-f]{40})$", content, re.MULTILINE))
+    if len(current) == 3:
         pinned_versions = {
             factory_version(repo, current[name])
-            for name, repo in (("TMX_REF", tmx_repo), ("SERVER_REF", server_repo))
+            for name, repo in (("TMX_REF", tmx_repo), ("SERVER_REF", server_repo), ("PUB_REF", pub_repo))
         }
         if len(pinned_versions) == 1 and None not in pinned_versions:
             pinned_version = pinned_versions.pop()
             if version_key(version) < version_key(pinned_version):
                 raise ValueError(f"Refusing to downgrade factory from {pinned_version} to {version}")
-    replacements = {"TMX_REF": tmx_ref, "SERVER_REF": server_ref}
+    replacements = {"TMX_REF": tmx_ref, "SERVER_REF": server_ref, "PUB_REF": pub_ref}
     for name, ref in replacements.items():
         pattern = rf"^{name}=[0-9a-f]{{40}}$"
         updated, count = re.subn(pattern, f"{name}={ref}", content, flags=re.MULTILINE)
@@ -100,7 +101,7 @@ def update_sources(path: Path, tmx_repo: Path, server_repo: Path) -> bool:
     changed = content != path.read_text()
     if changed:
         path.write_text(content)
-    print(f"Selected tods-competition-factory {version}: TMX {tmx_ref}, server {server_ref}")
+    print(f"Selected tods-competition-factory {version}: TMX {tmx_ref}, server {server_ref}, pub {pub_ref}")
     return changed
 
 
@@ -117,7 +118,7 @@ def main() -> None:
                 check=True,
             )
             repositories[name] = destination
-        update_sources(args.sources, repositories["TMX_REF"], repositories["SERVER_REF"])
+        update_sources(args.sources, repositories["TMX_REF"], repositories["SERVER_REF"], repositories["PUB_REF"])
 
 
 if __name__ == "__main__":

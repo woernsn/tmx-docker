@@ -36,7 +36,7 @@ jobs:
           fi
       - uses: docker/setup-buildx-action@v4
         if: steps.candidate.outputs.changed == 'true'
-      - name: Test proposed image pair in Compose
+      - name: Test proposed images in Compose
         id: smoke
         if: steps.candidate.outputs.changed == 'true'
         run: bash scripts/smoke_stack.sh "$RUNNER_TEMP/candidate-sources.env"
