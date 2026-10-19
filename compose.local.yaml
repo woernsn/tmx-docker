@@ -1,4 +1,4 @@
-# Build all three application images from the upstream commits in sources.env.
+# Build all three application images from the upstream release tags in sources.env.
 services:
   server:
     image: tmx-local-server:latest

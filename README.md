@@ -38,17 +38,20 @@ depend on them need those services configured separately.
 
 | Original repository | How this stack uses it | Version selection |
 | --- | --- | --- |
-| [TMX](https://github.com/CourtHive/TMX) | Builds the browser application in the `web` image. | `TMX_REF` in [`sources.env`](sources.env) pins a full upstream commit for local builds and published images. |
-| [competition-factory-server](https://github.com/CourtHive/competition-factory-server) | Builds the `server` image, which stores accounts and tournament records and exposes the API used by TMX and the manager. | `SERVER_REF` in [`sources.env`](sources.env) pins a separate full upstream commit. |
-| [courthive-public](https://github.com/CourtHive/courthive-public) | Builds the `pub` image for browsing published tournaments at `/pub/`. | `PUB_REF` in [`sources.env`](sources.env) pins a full upstream commit. |
+| [TMX](https://github.com/CourtHive/TMX) | Builds the browser application in the `web` image. | `TMX_REF` in [`sources.env`](sources.env) pins an upstream release tag for local builds and published images. |
+| [competition-factory-server](https://github.com/CourtHive/competition-factory-server) | Builds the `server` image, which stores accounts and tournament records and exposes the API used by TMX and the manager. | `SERVER_REF` in [`sources.env`](sources.env) pins an upstream release tag. |
+| [courthive-public](https://github.com/CourtHive/courthive-public) | Builds the `pub` image for browsing published tournaments at `/pub/`. | `PUB_REF` in [`sources.env`](sources.env) pins an upstream release tag. |
 | [Competition Factory](https://github.com/CourtHive/competition-factory) (`tods-competition-factory`) | Supplies tournament rules and record operations to TMX, the server, and the public viewer; the manager uses it through the server API. | Each pinned upstream project declares its package version. CI requires all three declarations to match before publishing the images. |
-| [courthive-components](https://github.com/CourtHive/courthive-components) | The manager serves its CSS locally for `button`, form field, select, menu, and notification styles. TMX uses the library in its own build. | The manager's copied CSS bundle is fixed at **6.2.0** in [`manager/static/courthive-components.css`](manager/static/courthive-components.css), independently of the TMX and server pins. |
+| [courthive-components](https://github.com/CourtHive/courthive-components) | The manager serves its CSS locally for `button`, form field, select, menu, and notification styles. TMX uses the library in its own build. | `COMPONENTS_VERSION` in [`sources.env`](sources.env) pins the manager's copied CSS bundle in [`manager/static/courthive-components.css`](manager/static/courthive-components.css), independently of the TMX and server pins. |
 
 The weekly [source update workflow](.github/workflows/update-sources.yml) selects
-the newest TMX, server, and public viewer commits that declare the same Competition Factory
-version, runs the stack smoke test, then updates `sources.env`. The
+the newest compatible release tags within the pinned major version of TMX,
+server, and public viewer. Their `tods-competition-factory` versions must match.
+It also selects the newest stable `courthive-components` release within its
+pinned major version. It updates the manager's copied CSS and license notice,
+runs the stack smoke test, then commits the updated pins and assets. The
 [publishing workflow](.github/workflows/publish-images.yml) builds all three images
-from those commits. In Compose, `IMAGE_TAG=latest` selects the latest published
+from those tags. In Compose, `IMAGE_TAG=latest` selects the latest published
 set; `IMAGE_TAG=sha-<this-repository-commit>` selects a specific set. The
 manager image is built locally from this repository and does not use
 `IMAGE_TAG`.
@@ -63,10 +66,10 @@ administrator account.
 
 The manager serves the CSS bundle from
 [courthive-components](https://github.com/CourtHive/courthive-components)
-version 6.2.0 locally. Its forms, buttons, menus, and notices use the shared
-classes; TMX's own dependency version is determined by its pinned source
-commit. The Flask application has no Node.js runtime or external stylesheet
-request. The bundled stylesheet's license is in
+version pinned in [`sources.env`](sources.env) locally. Its forms, buttons,
+menus, and notices use the shared classes; TMX's own dependency version comes
+from its pinned source tag. The Flask application has no Node.js runtime or
+external stylesheet request. The bundled stylesheet's license is in
 [`manager/COURTHIVE-COMPONENTS-LICENSE`](manager/COURTHIVE-COMPONENTS-LICENSE).
 
 The UI provides:
@@ -135,14 +138,15 @@ the registry before starting the stack.
 
 ## Build the images locally
 
-[`sources.env`](sources.env) pins full commits of TMX (`TMX_REF`),
+[`sources.env`](sources.env) pins release tags of TMX (`TMX_REF`),
 competition-factory-server (`SERVER_REF`), and courthive-public (`PUB_REF`).
 The pinned projects must declare the same `tods-competition-factory` version.
-Change those commits to select different upstream versions; no local upstream
-checkout is needed.
+Change those tags to select different upstream versions; no local upstream
+checkout is needed. Upstream tags can be moved, so a later build of the same
+tag may resolve to a different commit.
 
 With `.env` configured as above, build the web, server, and public viewer images from the
-pinned commits and run the stack using the
+pinned tags and run the stack using the
 [local Compose override](compose.local.yaml):
 
 ```sh
@@ -164,7 +168,7 @@ and removes its test database afterward.
 
 PostgreSQL data persists in the `postgres-data` volume. The server applies
 database migrations on startup. Back up the database before changing image
-tags or rebuilding from different source commits:
+tags or rebuilding from different source releases:
 
 ```sh
 docker compose exec -T postgres pg_dump -U tmx -d tmx > tmx-backup.sql
@@ -181,17 +185,17 @@ The original code in this repository is licensed under the [MIT License](LICENSE
 Upstream code and bundled third-party assets retain their own terms; this
 repository's license does not grant rights to them.
 
-| Component | License information |
+| Component | License information checked for the listed release |
 | --- | --- |
-| [TMX](https://github.com/CourtHive/TMX/blob/2791798a59da375c9e0935b066507ef42597c023/LICENSE.txt) | MIT, copyright 2024 Charles Allen. The web image includes its `LICENSE.txt`. |
-| [competition-factory-server](https://github.com/CourtHive/competition-factory-server/blob/6f0662ca17c98c929f46e136362545f5ca7aa359/package.json) | Its `package.json` declares MIT; the pinned source tree has no license file. |
-| [courthive-public](https://github.com/CourtHive/courthive-public/blob/fadcf74248f34cda37e3d4709b8c649159c2236f/README.md) | The pinned source has no license file or package license field. Its README calls it private. Confirm redistribution terms with CourtHive before publishing the `pub` image. |
+| [TMX v8.38.2](https://github.com/CourtHive/TMX/blob/v8.38.2/LICENSE.txt) | MIT, copyright 2024 Charles Allen. The web image includes its `LICENSE.txt`. |
+| [competition-factory-server v4.3.0](https://github.com/CourtHive/competition-factory-server/blob/v4.3.0/package.json) | Its `package.json` declares MIT; this release has no license file. |
+| [courthive-public v1.17.3](https://github.com/CourtHive/courthive-public/blob/v1.17.3/README.md) | This release has no license file or package license field. Its README calls it private. Confirm redistribution terms with CourtHive before publishing the `pub` image. |
 | [Competition Factory](https://github.com/CourtHive/competition-factory/blob/master/LICENSE) package | MIT; all three application builds install it as a dependency. |
 | [courthive-components](https://github.com/CourtHive/courthive-components) CSS | MIT; the bundled stylesheet's notice is in [`manager/COURTHIVE-COMPONENTS-LICENSE`](manager/COURTHIVE-COMPONENTS-LICENSE). |
 
 ## Upstream source changes during image builds
 
-The Dockerfiles copy the pinned upstream commits into build stages, then make
+The Dockerfiles copy the pinned upstream releases into build stages, then make
 these changes before building the images. They do not alter the upstream
 repositories.
 

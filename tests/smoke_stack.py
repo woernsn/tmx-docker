@@ -32,6 +32,11 @@ def manager_client():
     login_page = page("/login")
     assert 'href="/manage/static/style.css"' in login_page, "Manager assets do not use /manage"
     assert b".topbar" in urllib.request.urlopen(BASE + "/manage/static/style.css", timeout=30).read()
+    assert 'href="/manage/static/courthive-components.css"' in login_page
+    components_css = urllib.request.urlopen(
+        BASE + "/manage/static/courthive-components.css", timeout=30
+    ).read()
+    assert b".button{" in components_css and b"--chc-text-primary" in components_css
     login_response = page("/login", {
         "csrf": csrf(login_page),
         "email": "smoke@example.invalid",

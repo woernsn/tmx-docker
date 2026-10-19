@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin the newest upstream commits with the same factory dependency version."""
+"""Pin compatible upstream release tags within each project's current major version."""
 
 import argparse
 import json
@@ -16,6 +16,8 @@ UPSTREAMS = {
 }
 DEPENDENCY = "tods-competition-factory"
 VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$", re.ASCII)
+RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+$", re.ASCII)
+PIN = re.compile(r"^(TMX_REF|SERVER_REF|PUB_REF)=(v\d+\.\d+\.\d+)$", re.MULTILINE)
 
 
 def git(repo: Path, *args: str) -> str:
@@ -24,37 +26,17 @@ def git(repo: Path, *args: str) -> str:
     ).strip()
 
 
-def factory_version(repo: Path, ref: str) -> str | None:
+def package_info(repo: Path, ref: str) -> dict | None:
     try:
-        package = json.loads(git(repo, "show", f"{ref}:package.json"))
+        return json.loads(git(repo, "show", f"{ref}:package.json"))
     except subprocess.CalledProcessError:
         return None
-    return package.get("dependencies", {}).get(DEPENDENCY)
-
-
-def previous_version(repo: Path, ref: str) -> tuple[str, str] | None:
-    """Find the last commit before the current dependency version began."""
-    while True:
-        change = git(
-            repo, "log", "--first-parent", "-m", "-G", DEPENDENCY,
-            "--max-count=1", "--format=%H", ref, "--", "package.json",
-        )
-        if not change:
-            return None
-        try:
-            parent = git(repo, "rev-parse", f"{change}^1")
-        except subprocess.CalledProcessError:
-            return None  # The dependency was introduced in the root commit.
-        old_version = factory_version(repo, parent)
-        if old_version != factory_version(repo, ref):
-            return (parent, old_version) if old_version else None
-        ref = parent  # The dependency line changed without changing its version.
 
 
 def version_key(version: str) -> tuple:
     match = VERSION.fullmatch(version)
     if not match:
-        raise ValueError(f"Unsupported factory version {version!r}; expected an exact semver")
+        raise ValueError(f"Unsupported version {version!r}; expected an exact semver")
     major, minor, patch, prerelease = match.groups()
     identifiers = tuple(
         (0, int(part)) if part.isdigit() else (1, part)
@@ -63,40 +45,61 @@ def version_key(version: str) -> tuple:
     return (int(major), int(minor), int(patch), prerelease is None, identifiers)
 
 
-def latest_sources(tmx_repo: Path, server_repo: Path, pub_repo: Path) -> tuple[str, str, str, str]:
+def release_versions(repo: Path, pinned: str) -> dict[str, str]:
+    """Map factory dependency versions to the newest eligible release tag."""
+    tags = [tag for tag in git(repo, "tag", "--list").splitlines() if RELEASE_TAG.fullmatch(tag)]
+    if pinned not in tags:
+        raise ValueError(f"Pinned release tag {pinned} is missing from {repo}")
+    pinned_major = version_key(pinned[1:])[0]
+    eligible = sorted(
+        (tag for tag in tags
+         if version_key(tag[1:])[0] == pinned_major
+         and version_key(tag[1:]) >= version_key(pinned[1:])),
+        key=lambda tag: version_key(tag[1:]), reverse=True,
+    )
+    versions = {}
+    for tag in eligible:
+        package = package_info(repo, tag)
+        if not package or package.get("version") != tag[1:]:
+            if tag == pinned:
+                raise ValueError(f"Pinned tag {tag} does not match its package version")
+            continue
+        dependency = package.get("dependencies", {}).get(DEPENDENCY)
+        if dependency:
+            version_key(dependency)
+            versions.setdefault(dependency, tag)
+    if not versions:
+        raise ValueError(f"No eligible release of {repo} declares {DEPENDENCY}")
+    return versions
+
+
+def latest_sources(tmx_repo: Path, server_repo: Path, pub_repo: Path,
+                   current: dict[str, str]) -> tuple[str, str, str, str]:
     repos = {"TMX_REF": tmx_repo, "SERVER_REF": server_repo, "PUB_REF": pub_repo}
-    refs = {name: git(repo, "rev-parse", "HEAD") for name, repo in repos.items()}
-    versions = {name: factory_version(repo, refs[name]) for name, repo in repos.items()}
-    if None in versions.values():
-        raise ValueError("An upstream HEAD has no tods-competition-factory dependency")
-    while len(set(versions.values())) != 1:
-        newer = max(repos, key=lambda name: version_key(versions[name]))
-        previous = previous_version(repos[newer], refs[newer])
-        if previous is None:
-            raise ValueError("No shared tods-competition-factory version in upstream history")
-        refs[newer], versions[newer] = previous
-    return refs["TMX_REF"], refs["SERVER_REF"], refs["PUB_REF"], versions["TMX_REF"]
+    versions = {name: release_versions(repo, current[name]) for name, repo in repos.items()}
+    shared = set.intersection(*(set(releases) for releases in versions.values()))
+    if not shared:
+        raise ValueError("No shared tods-competition-factory version among eligible release tags")
+    factory = max(shared, key=version_key)
+    return (versions["TMX_REF"][factory], versions["SERVER_REF"][factory],
+            versions["PUB_REF"][factory], factory)
 
 
 def update_sources(path: Path, tmx_repo: Path, server_repo: Path, pub_repo: Path) -> bool:
-    tmx_ref, server_ref, pub_ref, version = latest_sources(tmx_repo, server_repo, pub_repo)
     content = path.read_text()
-    current = dict(re.findall(r"^(TMX_REF|SERVER_REF|PUB_REF)=([0-9a-f]{40})$", content, re.MULTILINE))
-    if len(current) == 3:
-        pinned_versions = {
-            factory_version(repo, current[name])
-            for name, repo in (("TMX_REF", tmx_repo), ("SERVER_REF", server_repo), ("PUB_REF", pub_repo))
-        }
-        if len(pinned_versions) == 1 and None not in pinned_versions:
-            pinned_version = pinned_versions.pop()
-            if version_key(version) < version_key(pinned_version):
-                raise ValueError(f"Refusing to downgrade factory from {pinned_version} to {version}")
+    pins = PIN.findall(content)
+    current = dict(pins)
+    if len(pins) != 3 or set(current) != set(UPSTREAMS):
+        raise ValueError(f"Expected one stable release tag for each upstream in {path}")
+    tmx_ref, server_ref, pub_ref, version = latest_sources(
+        tmx_repo, server_repo, pub_repo, current
+    )
     replacements = {"TMX_REF": tmx_ref, "SERVER_REF": server_ref, "PUB_REF": pub_ref}
     for name, ref in replacements.items():
-        pattern = rf"^{name}=[0-9a-f]{{40}}$"
+        pattern = rf"^{name}=v\d+\.\d+\.\d+$"
         updated, count = re.subn(pattern, f"{name}={ref}", content, flags=re.MULTILINE)
         if count != 1:
-            raise ValueError(f"Expected exactly one full commit ID for {name} in {path}")
+            raise ValueError(f"Expected exactly one stable release tag for {name} in {path}")
         content = updated
     changed = content != path.read_text()
     if changed:
@@ -114,7 +117,7 @@ def main() -> None:
         for name, url in UPSTREAMS.items():
             destination = Path(temporary) / name.lower()
             subprocess.run(
-                ["git", "clone", "--quiet", "--filter=blob:none", "--no-checkout", url, str(destination)],
+                ["git", "clone", "--quiet", "--tags", "--filter=blob:none", "--no-checkout", url, str(destination)],
                 check=True,
             )
             repositories[name] = destination
