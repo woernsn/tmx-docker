@@ -38,7 +38,7 @@ services:
       APP_MODE: production
       APP_PORT: '8383'
       APP_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
-      TMX_URL: /tmx/
+      TMX_URL: /
       CFS_CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       STORAGE_PROVIDER: postgres
@@ -78,8 +78,10 @@ services:
         condition: service_healthy
       pub:
         condition: service_healthy
+      manager:
+        condition: service_healthy
     healthcheck:
-      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1/tmx/ && wget -q -O /dev/null http://127.0.0.1/pub/"]
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1/ && wget -q -O /dev/null http://127.0.0.1/pub/ && wget -q -O /dev/null http://127.0.0.1/manage/login"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -101,8 +103,6 @@ services:
       dockerfile: Dockerfile.manager
     pull_policy: build
     restart: unless-stopped
-    ports:
-      - '${MANAGER_BIND_ADDRESS:-127.0.0.1}:${MANAGER_HTTP_PORT:-8081}:8081'
     environment:
       TMX_API_URL: http://server:8383
       MANAGER_COOKIE_SECURE: ${MANAGER_COOKIE_SECURE:-false}
