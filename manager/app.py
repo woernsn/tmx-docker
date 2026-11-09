@@ -10,12 +10,14 @@ import urllib.parse
 import urllib.request
 from functools import wraps
 
-from flask import Flask, g, redirect, render_template, request, url_for
+from flask import Flask, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+import identity
 
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_prefix=1)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 API_URL = os.environ.get("TMX_API_URL", "http://server:8383").rstrip("/")
 COOKIE_SECURE = os.environ.get("MANAGER_COOKIE_SECURE", "false").lower() == "true"
@@ -33,6 +35,13 @@ class APIUnauthorized(APIError):
 
 
 def api(path, data, token=None, method="POST"):
+    if path in identity.ROUTES:
+        try:
+            return identity.dispatch(path, data, token, method, request.remote_addr or "")
+        except identity.IdentityError as exc:
+            if exc.status == 401:
+                raise APIUnauthorized(str(exc)) from exc
+            raise APIError(str(exc)) from exc
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -215,6 +224,20 @@ def health():
     return "ok"
 
 
+@app.route("/auth/<path:route>", methods=["GET", "POST", "PATCH"])
+def auth_route(route):
+    path = "/auth/" + route
+    if path not in identity.ROUTES:
+        return jsonify({"message": "Not found"}), 404
+    authorization = request.headers.get("Authorization", "")
+    token = authorization[7:] if authorization.startswith("Bearer ") else None
+    try:
+        return jsonify(identity.dispatch(path, request.get_json(silent=True), token,
+                                         request.method, request.remote_addr or ""))
+    except identity.IdentityError as exc:
+        return jsonify({"message": str(exc), "error": str(exc)}), exc.status
+
+
 @app.get("/")
 def index():
     return redirect(url_for("providers"))
@@ -328,7 +351,7 @@ def reset_password():
     result = api("/auth/admin-reset-password", {"email": email, "newPassword": password}, g.session["token"])
     g.session["user_notice"] = {
         "message": f"Password changed for {email}", "password": result.get("password"),
-        "note": "Give this password to the user securely. Existing sessions for that user are invalidated.",
+        "note": "Give this password to the user securely. Refresh sessions are revoked. Existing access tokens expire after four hours.",
     }
     return redirect(url_for("users", email=email.lower()))
 

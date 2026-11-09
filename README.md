@@ -18,14 +18,16 @@ changes documented at the end of this README.
 
 ## What runs
 
-| Service | Purpose |
-| --- | --- |
-| `web` (`tmx-docker-web`) | The built TMX browser application, served by nginx at `/`. nginx also serves the public viewer at `/pub/` and the manager at `/manage/`, and forwards API and Socket.IO requests to `server` on the same origin. |
-| `server` (`tmx-docker-server`) | The Competition Factory server, which handles accounts and tournament records and applies tournament mutations. |
-| `pub` (`tmx-docker-pub`) | The [courthive-public](https://github.com/CourtHive/courthive-public) browser application for published tournaments. |
-| `manager` (`tmx-manager`) | A small Flask administration UI at `/manage/` for providers, user accounts, provider memberships, and tournament access. It calls the CF server API and is built from this repository. |
-| `postgres` | Persistent storage for accounts and tournament records. |
-| `redis` | Disposable cache used by the server. |
+- `web` (`tmx-docker-web`) serves TMX at `/`, the public viewer at `/pub/`, and the manager at `/manage/`.
+  Nginx forwards account routes to `manager` and tournament routes to `server`.
+- `server` (`tmx-docker-server`) stores accounts and tournament records.
+  It applies tournament mutations.
+- `pub` (`tmx-docker-pub`) serves the [courthive-public](https://github.com/CourtHive/courthive-public) browser application for published tournaments.
+- `manager` (`tmx-manager`) provides the administration UI and identity routes for TMX and manager accounts.
+  It uses the server API for provider and tournament actions.
+  It uses PostgreSQL for account actions.
+- `postgres` stores accounts and tournament records.
+- `redis` provides a disposable cache for the server and login rate limits for the manager.
 
 The TMX web, server, and public viewer are separate images and should use the
 same `IMAGE_TAG`. All three contain a compatible version of the Competition Factory.
@@ -56,13 +58,21 @@ set; `IMAGE_TAG=sha-<this-repository-commit>` selects a specific set. The
 manager image is built locally from this repository and does not use
 `IMAGE_TAG`.
 
+Server v4.9.0 removed its account routes.
+The manager supplies the account and session routes used by TMX and the management UI.
+Nginx sends those routes to the manager and keeps tournament token and claim routes on the server.
+The public viewer's personal HiveID account flows are outside this integration.
+TMX invitation, self-registration, magic-link login, and email-based password recovery are also outside this integration.
+
 ## Manager
 
-`manager` is a helper container developed in this repository. It is not a
-CourtHive component. Its Flask web UI calls the Competition Factory server's
-REST API and starts with the rest of the Compose stack. Open it at
-<http://localhost:8080/manage/> by default and sign in with the initial CF server
-administrator account.
+`manager` is a helper container developed in this repository.
+It is not a CourtHive component.
+Its Flask web UI calls the Competition Factory server's REST API for provider and tournament actions.
+Its identity routes use the existing PostgreSQL user tables and issue tokens that the server verifies.
+The manager supports password login, first-login password changes, provider selection, token refresh, logout, and superadmin user administration.
+Open it at <http://localhost:8080/manage/> by default.
+Sign in with the initial CF server administrator account.
 
 The manager serves the CSS bundle from
 [courthive-components](https://github.com/CourtHive/courthive-components)
@@ -81,8 +91,9 @@ The UI provides:
 - **Tournaments:** Browse tournaments nested under their provider and grant or
   revoke user access as Director, Scorer, or Observer.
 
-The manager shares the web service's address. Set `MANAGER_COOKIE_SECURE=true`
-when serving the UI through HTTPS.
+The manager shares the web service's address.
+You MUST set `MANAGER_COOKIE_SECURE=true` when serving the UI through HTTPS.
+The manager and server use the same `JWT_SECRET` and PostgreSQL database.
 
 ## Run with Docker Compose
 

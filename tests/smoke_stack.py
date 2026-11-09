@@ -77,6 +77,19 @@ def expect_success(path, data, token):
     return response
 
 
+def expect_http_error(path, data, status, token=None):
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(BASE + path, data=json.dumps(data).encode(), headers=headers)
+    try:
+        urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as error:
+        assert error.code == status, f"{path}: expected HTTP {status}, got {error.code}"
+    else:
+        raise AssertionError(f"{path}: expected HTTP {status}")
+
+
 def main():
     with urllib.request.urlopen(BASE + "/", timeout=30) as response:
         assert response.url == BASE + "/", "TMX root redirected to a subpath"
@@ -106,6 +119,15 @@ def main():
     })
     token = login.get("token")
     assert token, f"Login did not return a token: {login}"
+    assert login.get("refreshToken"), "Login did not return a refresh token"
+    expect_http_error("/auth/login", {"email": "smoke@example.invalid", "password": "wrong"}, 401)
+    expect_http_error("/auth/allusers", {}, 401)
+    expect_http_error("/auth/tracker-token", {}, 401, token=None)
+    refreshed = request("/auth/refresh", {"refreshToken": login["refreshToken"]})
+    assert refreshed.get("token") and refreshed.get("refreshToken") != login["refreshToken"]
+    expect_http_error("/auth/refresh", {"refreshToken": login["refreshToken"]}, 401)
+    expect_http_error("/auth/refresh", {"refreshToken": refreshed["refreshToken"]}, 401)
+    token = refreshed["token"]
 
     page, csrf = manager_client()
     empty_providers_page = page("/providers")
@@ -172,6 +194,35 @@ def main():
     assert changed_password in reset_page, "The new password was not shown to the administrator"
     user_login = request("/auth/login", {"email": "director@example.invalid", "password": changed_password})
     assert user_login.get("mustChangePassword") and user_login.get("limitedToken")
+    first_login_password = uuid4().hex[:8]
+    first_session = request("/auth/complete-first-login", {
+        "limitedToken": user_login["limitedToken"], "newPassword": first_login_password,
+    })
+    assert first_session.get("token") and first_session.get("refreshToken")
+    expect_http_error("/auth/complete-first-login", {
+        "limitedToken": user_login["limitedToken"], "newPassword": uuid4().hex,
+    }, 401)
+    user_context = json.loads(urllib.request.urlopen(urllib.request.Request(
+        BASE + "/auth/me", headers={"Authorization": f"Bearer {first_session['token']}"}), timeout=30).read())
+    assert user_context["email"] == "director@example.invalid"
+    assert user_context["providerRoles"][provider_id] == "DIRECTOR"
+    second_provider_path = "/providers?id=" + urllib.parse.quote(second_provider_id)
+    page("/providers/associate", {"csrf": csrf(page(second_provider_path)),
+        "user_id": created_user["userId"], "provider_id": second_provider_id, "role": "DIRECTOR"})
+    remember = urllib.request.Request(BASE + "/auth/me/last-selected-provider",
+        data=json.dumps({"providerId": second_provider_id}).encode(), method="PATCH",
+        headers={"Authorization": f"Bearer {first_session['token']}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(remember, timeout=30) as response:
+        assert json.load(response).get("success") is True
+    selection = request("/auth/login", {
+        "email": "director@example.invalid", "password": first_login_password,
+    })
+    assert selection.get("providerSelectionRequired") and len(selection.get("providers", [])) == 2
+    assert selection.get("lastSelectedProviderId") == second_provider_id
+    selected = request("/auth/select-provider", {"providerId": second_provider_id}, selection["selectionToken"])
+    assert selected.get("token") and selected.get("refreshToken")
+    page("/providers/disassociate", {"csrf": csrf(page(second_provider_path)),
+        "user_id": created_user["userId"], "provider_id": second_provider_id})
     name = f"Compose smoke {uuid4()}"
     created = expect_success("/factory/generate", {
         "tournamentName": name,
@@ -199,6 +250,7 @@ def main():
         "tournament_id": tournament_id, "email": "director@example.invalid", "role": "DIRECTOR"})
     assignments = expect_success("/factory/assignments/list", {"tournamentId": tournament_id}, token)["assignments"]
     assert any(a["email"] == "director@example.invalid" and a["assignmentRole"] == "DIRECTOR" for a in assignments)
+    expect_success("/factory/fetch", {"tournamentId": tournament_id}, first_session["token"])
     tournament_page = page(tournament_path)
     assert "director@example.invalid" in tournament_page and "Revoke" in tournament_page
     page("/tournaments/revoke", {"csrf": csrf(tournament_page),

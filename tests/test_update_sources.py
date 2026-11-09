@@ -36,6 +36,17 @@ def pins(tmx="v8.1.0", server="v4.1.0", pub="v1.1.0"):
 
 
 class UpdateSourcesTests(unittest.TestCase):
+    def test_selects_server_releases_with_manager_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            create_repo(root / "tmx", [("8.49.0", "7.27.0"), ("8.50.1", "7.32.0")])
+            create_repo(root / "server", [("4.8.1", "7.27.0"), ("4.9.0", "7.30.0"),
+                                           ("4.11.0", "7.32.0")])
+            create_repo(root / "pub", [("1.21.0", "7.27.0"), ("1.22.0", "7.32.0")])
+            self.assertEqual(latest_sources(root / "tmx", root / "server", root / "pub",
+                                            pins("v8.49.0", "v4.8.1", "v1.21.0")),
+                             ("v8.50.1", "v4.11.0", "v1.22.0", "7.32.0"))
+
     def test_selects_newest_compatible_tags_and_ignores_untagged_head(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
