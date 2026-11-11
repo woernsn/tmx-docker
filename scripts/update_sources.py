@@ -13,11 +13,12 @@ UPSTREAMS = {
     "TMX_REF": "https://github.com/CourtHive/TMX.git",
     "SERVER_REF": "https://github.com/CourtHive/competition-factory-server.git",
     "PUB_REF": "https://github.com/CourtHive/courthive-public.git",
+    "HIVEID_REF": "https://github.com/CourtHive/courthive-hiveid.git",
 }
 DEPENDENCY = "tods-competition-factory"
 VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$", re.ASCII)
 RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+$", re.ASCII)
-PIN = re.compile(r"^(TMX_REF|SERVER_REF|PUB_REF)=(v\d+\.\d+\.\d+)$", re.MULTILINE)
+PIN = re.compile(r"^(TMX_REF|SERVER_REF|PUB_REF|HIVEID_REF)=(v\d+\.\d+\.\d+)$", re.MULTILINE)
 
 
 def git(repo: Path, *args: str) -> str:
@@ -73,6 +74,26 @@ def release_versions(repo: Path, pinned: str) -> dict[str, str]:
     return versions
 
 
+def latest_release(repo: Path, pinned: str) -> str:
+    """Select the newest tagged release in the pinned major version."""
+    tags = [tag for tag in git(repo, "tag", "--list").splitlines() if RELEASE_TAG.fullmatch(tag)]
+    if pinned not in tags:
+        raise ValueError(f"Pinned release tag {pinned} is missing from {repo}")
+    major = version_key(pinned[1:])[0]
+    eligible = sorted(
+        (tag for tag in tags if version_key(tag[1:])[0] == major
+         and version_key(tag[1:]) >= version_key(pinned[1:])),
+        key=lambda tag: version_key(tag[1:]), reverse=True,
+    )
+    for tag in eligible:
+        package = package_info(repo, tag)
+        if package and package.get("version") == tag[1:]:
+            return tag
+        if tag == pinned:
+            raise ValueError(f"Pinned tag {tag} does not match its package version")
+    raise ValueError(f"No eligible release of {repo}")
+
+
 def latest_sources(tmx_repo: Path, server_repo: Path, pub_repo: Path,
                    current: dict[str, str]) -> tuple[str, str, str, str]:
     repos = {"TMX_REF": tmx_repo, "SERVER_REF": server_repo, "PUB_REF": pub_repo}
@@ -85,16 +106,19 @@ def latest_sources(tmx_repo: Path, server_repo: Path, pub_repo: Path,
             versions["PUB_REF"][factory], factory)
 
 
-def update_sources(path: Path, tmx_repo: Path, server_repo: Path, pub_repo: Path) -> bool:
+def update_sources(path: Path, tmx_repo: Path, server_repo: Path, pub_repo: Path,
+                   hiveid_repo: Path) -> bool:
     content = path.read_text()
     pins = PIN.findall(content)
     current = dict(pins)
-    if len(pins) != 3 or set(current) != set(UPSTREAMS):
+    if len(pins) != 4 or set(current) != set(UPSTREAMS):
         raise ValueError(f"Expected one stable release tag for each upstream in {path}")
     tmx_ref, server_ref, pub_ref, version = latest_sources(
         tmx_repo, server_repo, pub_repo, current
     )
-    replacements = {"TMX_REF": tmx_ref, "SERVER_REF": server_ref, "PUB_REF": pub_ref}
+    hiveid_ref = latest_release(hiveid_repo, current["HIVEID_REF"])
+    replacements = {"TMX_REF": tmx_ref, "SERVER_REF": server_ref,
+                    "PUB_REF": pub_ref, "HIVEID_REF": hiveid_ref}
     for name, ref in replacements.items():
         pattern = rf"^{name}=v\d+\.\d+\.\d+$"
         updated, count = re.subn(pattern, f"{name}={ref}", content, flags=re.MULTILINE)
@@ -104,7 +128,7 @@ def update_sources(path: Path, tmx_repo: Path, server_repo: Path, pub_repo: Path
     changed = content != path.read_text()
     if changed:
         path.write_text(content)
-    print(f"Selected tods-competition-factory {version}: TMX {tmx_ref}, server {server_ref}, pub {pub_ref}")
+    print(f"Selected tods-competition-factory {version}: TMX {tmx_ref}, server {server_ref}, pub {pub_ref}; HiveID {hiveid_ref}")
     return changed
 
 
@@ -121,7 +145,8 @@ def main() -> None:
                 check=True,
             )
             repositories[name] = destination
-        update_sources(args.sources, repositories["TMX_REF"], repositories["SERVER_REF"], repositories["PUB_REF"])
+        update_sources(args.sources, repositories["TMX_REF"], repositories["SERVER_REF"],
+                       repositories["PUB_REF"], repositories["HIVEID_REF"])
 
 
 if __name__ == "__main__":

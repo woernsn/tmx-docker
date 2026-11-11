@@ -10,16 +10,15 @@ import urllib.parse
 import urllib.request
 from functools import wraps
 
-from flask import Flask, g, jsonify, redirect, render_template, request, url_for
+from flask import Flask, g, redirect, render_template, request, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
-
-import identity
 
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_prefix=1)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 API_URL = os.environ.get("TMX_API_URL", "http://server:8383").rstrip("/")
+HIVEID_URL = os.environ.get("HIVEID_API_URL", "http://hiveid:3140").rstrip("/")
 COOKIE_SECURE = os.environ.get("MANAGER_COOKIE_SECURE", "false").lower() == "true"
 SESSION_LIFETIME = 3 * 60 * 60
 sessions = {}
@@ -35,18 +34,12 @@ class APIUnauthorized(APIError):
 
 
 def api(path, data, token=None, method="POST"):
-    if path in identity.ROUTES:
-        try:
-            return identity.dispatch(path, data, token, method, request.remote_addr or "")
-        except identity.IdentityError as exc:
-            if exc.status == 401:
-                raise APIUnauthorized(str(exc)) from exc
-            raise APIError(str(exc)) from exc
+    base_url = HIVEID_URL if path.startswith(("/auth/", "/account/")) else API_URL
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
-        API_URL + path,
+        base_url + path,
         data=json.dumps(data).encode(),
         headers=headers,
         method=method,
@@ -56,7 +49,7 @@ def api(path, data, token=None, method="POST"):
             result = json.load(response)
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            raise APIUnauthorized("Your server session expired. Please sign in again.") from exc
+            raise APIUnauthorized("Your session expired. Please sign in again.") from exc
         try:
             detail = json.load(exc)
             message = detail.get("message") or detail.get("error") or str(exc)
@@ -64,9 +57,9 @@ def api(path, data, token=None, method="POST"):
             message = str(exc)
         raise APIError(str(message)) from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        raise APIError(f"Could not reach the CF server: {exc}") from exc
+        raise APIError(f"Could not reach the API: {exc}") from exc
     if not isinstance(result, dict):
-        raise APIError("Unexpected response from the CF server")
+        raise APIError("Unexpected response from the API")
     if result.get("error") or result.get("success") is False:
         raise APIError(str(result.get("error") or result.get("message") or "Request failed"))
     return result
@@ -224,20 +217,6 @@ def health():
     return "ok"
 
 
-@app.route("/auth/<path:route>", methods=["GET", "POST", "PATCH"])
-def auth_route(route):
-    path = "/auth/" + route
-    if path not in identity.ROUTES:
-        return jsonify({"message": "Not found"}), 404
-    authorization = request.headers.get("Authorization", "")
-    token = authorization[7:] if authorization.startswith("Bearer ") else None
-    try:
-        return jsonify(identity.dispatch(path, request.get_json(silent=True), token,
-                                         request.method, request.remote_addr or ""))
-    except identity.IdentityError as exc:
-        return jsonify({"message": str(exc), "error": str(exc)}), exc.status
-
-
 @app.get("/")
 def index():
     return redirect(url_for("providers"))
@@ -266,6 +245,10 @@ def login():
         # The manager performs global provider/user administration, so require
         # the same super-admin access that the CF server grants to its first admin.
         api("/provider/allproviders", {}, token)
+        if result.get("refreshToken"):
+            # The manager session ends before the access token expires.
+            # It does not need a persistent refresh session in HiveID.
+            api("/auth/logout", {"refreshToken": result["refreshToken"]})
     except APIError as exc:
         return render("login.html", error=str(exc)), 401
     with sessions_lock:

@@ -10,3 +10,7 @@ services:
   pub:
     image: tmx-smoke-pub:local
     pull_policy: never
+
+  hiveid:
+    image: tmx-smoke-hiveid:local
+    pull_policy: never

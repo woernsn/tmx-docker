@@ -31,12 +31,13 @@ def create_repo(path, releases, untagged=None):
         command(path, "commit", "-qm", "unreleased changes")
 
 
-def pins(tmx="v8.1.0", server="v4.1.0", pub="v1.1.0"):
-    return {"TMX_REF": tmx, "SERVER_REF": server, "PUB_REF": pub}
+def pins(tmx="v8.1.0", server="v4.1.0", pub="v1.1.0", hiveid="v0.4.0"):
+    return {"TMX_REF": tmx, "SERVER_REF": server, "PUB_REF": pub,
+            "HIVEID_REF": hiveid}
 
 
 class UpdateSourcesTests(unittest.TestCase):
-    def test_selects_server_releases_with_manager_identity(self):
+    def test_selects_server_releases_with_hiveid(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             create_repo(root / "tmx", [("8.49.0", "7.27.0"), ("8.50.1", "7.32.0")])
@@ -64,6 +65,8 @@ class UpdateSourcesTests(unittest.TestCase):
             create_repo(root / "server", [("4.1.0", "7.3.1"), ("5.0.0", "7.5.0")])
             create_repo(root / "pub", [("1.1.0", "7.3.1"), ("1.2.0", "7.4.0"),
                                        ("2.0.0", "7.5.0")])
+            create_repo(root / "hiveid", [("0.4.0", None), ("0.4.3", None),
+                                          ("1.0.0", None)])
             self.assertEqual(latest_sources(root / "tmx", root / "server", root / "pub", pins()),
                              ("v8.2.0", "v4.1.0", "v1.1.0", "7.3.1"))
             with self.assertRaisesRegex(ValueError, "No shared"):
@@ -72,11 +75,13 @@ class UpdateSourcesTests(unittest.TestCase):
 
             sources = root / "sources.env"
             sources.write_text("# pins\nTMX_REF=v8.1.0\nSERVER_REF=v4.1.0\n"
-                               "PUB_REF=v1.1.0\nCOMPONENTS_VERSION=6.10.1\n")
-            self.assertTrue(update_sources(sources, root / "tmx", root / "server", root / "pub"))
+                               "PUB_REF=v1.1.0\nHIVEID_REF=v0.4.0\nCOMPONENTS_VERSION=6.10.1\n")
+            self.assertTrue(update_sources(sources, root / "tmx", root / "server", root / "pub",
+                                           root / "hiveid"))
             self.assertEqual(sources.read_text(), "# pins\nTMX_REF=v8.2.0\nSERVER_REF=v4.1.0\n"
-                             "PUB_REF=v1.1.0\nCOMPONENTS_VERSION=6.10.1\n")
-            self.assertFalse(update_sources(sources, root / "tmx", root / "server", root / "pub"))
+                             "PUB_REF=v1.1.0\nHIVEID_REF=v0.4.3\nCOMPONENTS_VERSION=6.10.1\n")
+            self.assertFalse(update_sources(sources, root / "tmx", root / "server", root / "pub",
+                                            root / "hiveid"))
 
     def test_fails_without_shared_release_dependency(self):
         with tempfile.TemporaryDirectory() as temporary:
