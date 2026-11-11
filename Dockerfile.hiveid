@@ -4,8 +4,9 @@ WORKDIR /app
 RUN npm install --global pnpm@12.16.1
 COPY --from=source / /app/
 COPY scripts/patch_hiveid_first_login.mjs /tmp/patch_hiveid_first_login.mjs
+# pnpm prefers mature packages but accepts a required newer version.
 RUN node /tmp/patch_hiveid_first_login.mjs \
-    && HUSKY=0 pnpm install --no-frozen-lockfile \
+    && HUSKY=0 PNPM_CONFIG_MINIMUM_RELEASE_AGE_STRICT=false pnpm install --no-frozen-lockfile \
     && pnpm build
 
 FROM node:24-bookworm-slim

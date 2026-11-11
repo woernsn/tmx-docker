@@ -256,6 +256,8 @@ repositories.
   The production web image does not need the Playwright browser downloaded by that script.
 - The TMX, server, and public viewer Dockerfiles remove `link:../` overrides from their `pnpm-workspace.yaml` files.
   The Docker build does not include their sibling development checkouts.
+- The TMX, server, and HiveID Dockerfiles make pnpm's minimum release age non-strict during installation.
+  pnpm still prefers mature packages but accepts a required newer version when no mature version satisfies the dependency range.
 - [`scripts/patch_tmx_root.mjs`](scripts/patch_tmx_root.mjs) adds a root-path case to TMX's `src/services/publishing/publicUrl.ts`.
   The web build sets `BASE_URL` to empty because TMX is served at `/`.
 - [`Dockerfile.pub`](Dockerfile.pub) adds [`pub-config.js`](pub-config.js) to the public viewer.
