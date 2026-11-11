@@ -1,7 +1,7 @@
 name: tmx
 
 # Standalone distribution: application images are built and published by the
-# repository's GitHub Actions workflow. All three use the same release tag.
+# repository's GitHub Actions workflow. All four use the same release tag.
 services:
   postgres:
     image: postgres:18-alpine
@@ -41,6 +41,11 @@ services:
       TMX_URL: /
       CFS_CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY in .env}
+      JWT_KID: ${JWT_KID:?Set JWT_KID in .env}
+      JWT_ACCEPT_HS256: 'false'
+      HIVEID_BASE_URL: http://hiveid:3140
+      HIVEID_SIGNER_TOKEN: ${HIVEID_SIGNER_TOKEN:?Set HIVEID_SIGNER_TOKEN in .env}
       STORAGE_PROVIDER: postgres
       PG_HOST: postgres
       PG_PORT: '5432'
@@ -80,6 +85,8 @@ services:
         condition: service_healthy
       manager:
         condition: service_healthy
+      hiveid:
+        condition: service_healthy
     healthcheck:
       test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1/ && wget -q -O /dev/null http://127.0.0.1/pub/ && wget -q -O /dev/null http://127.0.0.1/manage/login"]
       interval: 10s
@@ -96,6 +103,41 @@ services:
       timeout: 5s
       retries: 5
 
+  hiveid:
+    image: ghcr.io/woernsn/tmx-docker-hiveid:${IMAGE_TAG:-latest}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3140'
+      PG_HOST: postgres
+      PG_PORT: '5432'
+      PG_USER: tmx
+      PG_DATABASE: tmx
+      PG_PASSWORD: ${PG_PASSWORD:?Set PG_PASSWORD in .env}
+      JWT_SIGN_ES256: 'true'
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?Set JWT_PRIVATE_KEY in .env}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY in .env}
+      JWT_KID: ${JWT_KID:?Set JWT_KID in .env}
+      JWT_ACCEPT_HS256: 'false'
+      HIVEID_SIGNER_TOKEN: ${HIVEID_SIGNER_TOKEN:?Set HIVEID_SIGNER_TOKEN in .env}
+      APP_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      TMX_URL: /
+      PUBLIC_URL: /pub/
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      PERSONS_BASE_URL: ${PERSONS_BASE_URL:-}
+      PERSONS_SERVICE_TOKEN: ${PERSONS_SERVICE_TOKEN:-}
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "Promise.all([fetch('http://127.0.0.1:3140/health/core-db'), fetch('http://127.0.0.1:3140/.well-known/jwks.json')]).then(async ([db, jwks]) => { if (!db.ok || !jwks.ok || !(await jwks.json()).keys.some(key => key.kid === process.env.JWT_KID)) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   manager:
     image: tmx-manager:local
     build:
@@ -105,18 +147,12 @@ services:
     restart: unless-stopped
     environment:
       TMX_API_URL: http://server:8383
+      HIVEID_API_URL: http://hiveid:3140
       MANAGER_COOKIE_SECURE: ${MANAGER_COOKIE_SECURE:-false}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
-      PG_HOST: postgres
-      PG_PORT: '5432'
-      PG_USER: tmx
-      PG_DATABASE: tmx
-      PG_PASSWORD: ${PG_PASSWORD:?Set PG_PASSWORD in .env}
-      REDIS_URL: redis://redis:6379
     depends_on:
       server:
         condition: service_healthy
-      redis:
+      hiveid:
         condition: service_healthy
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]

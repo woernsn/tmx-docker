@@ -1,6 +1,7 @@
 """Exercise nginx, authentication, factory mutations, and PostgreSQL together."""
 
 import json
+import base64
 import http.cookiejar
 import os
 import re
@@ -119,7 +120,13 @@ def main():
     })
     token = login.get("token")
     assert token, f"Login did not return a token: {login}"
+    header = json.loads(base64.urlsafe_b64decode(token.split(".")[0] + "=="))
+    assert header.get("alg") == "ES256" and header.get("kid") == os.environ["JWT_KID"], header
     assert login.get("refreshToken"), "Login did not return a refresh token"
+    with urllib.request.urlopen(BASE + "/.well-known/jwks.json", timeout=30) as response:
+        jwks = json.load(response)
+    assert any(key.get("kid") == header["kid"] for key in jwks.get("keys", []))
+    expect_http_error("/internal/mint", {}, 404)
     expect_http_error("/auth/login", {"email": "smoke@example.invalid", "password": "wrong"}, 401)
     expect_http_error("/auth/allusers", {}, 401)
     expect_http_error("/auth/tracker-token", {}, 401, token=None)

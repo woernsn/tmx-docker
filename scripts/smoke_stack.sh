@@ -7,6 +7,7 @@ source "$sources_file"
 : "${TMX_REF:?Missing TMX_REF}"
 : "${SERVER_REF:?Missing SERVER_REF}"
 : "${PUB_REF:?Missing PUB_REF}"
+: "${HIVEID_REF:?Missing HIVEID_REF}"
 
 docker buildx build --platform linux/amd64 --load \
   --build-context "source=https://github.com/CourtHive/TMX.git#${TMX_REF}" \
@@ -17,9 +18,20 @@ docker buildx build --platform linux/amd64 --load \
 docker buildx build --platform linux/amd64 --load \
   --build-context "source=https://github.com/CourtHive/courthive-public.git#${PUB_REF}" \
   --file Dockerfile.pub --tag tmx-smoke-pub:local .
+docker buildx build --platform linux/amd64 --load \
+  --build-context "source=https://github.com/CourtHive/courthive-hiveid.git#${HIVEID_REF}" \
+  --file Dockerfile.hiveid --tag tmx-smoke-hiveid:local .
 
 export PG_PASSWORD="$(openssl rand -hex 32)"
 export JWT_SECRET="$(openssl rand -hex 32)"
+export HIVEID_SIGNER_TOKEN="$(openssl rand -hex 32)"
+export JWT_KID=smoke-current
+private_key_file="$(mktemp)"
+public_key_file="$(mktemp)"
+openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out "$private_key_file"
+openssl ec -in "$private_key_file" -pubout -out "$public_key_file"
+export JWT_PRIVATE_KEY="$(awk 'BEGIN { ORS="" } { print $0 "\\n" }' "$private_key_file")"
+export JWT_PUBLIC_KEY="$(awk 'BEGIN { ORS="" } { print $0 "\\n" }' "$public_key_file")"
 export HTTP_PORT=18080
 export BIND_ADDRESS=127.0.0.1
 export MANAGER_COOKIE_SECURE=false
@@ -28,6 +40,7 @@ export PUBLIC_ORIGIN="http://${BIND_ADDRESS}:${HTTP_PORT}"
 compose=(docker compose -p tmx-smoke -f compose.yaml -f tests/compose.smoke.yaml)
 cleanup() {
   result=$?
+  rm -f "$private_key_file" "$public_key_file"
   if (( result != 0 )); then
     "${compose[@]}" ps || true
     "${compose[@]}" logs --no-color --tail=100 || true
